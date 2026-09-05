@@ -29,7 +29,10 @@ export default function MicrobytePlayer() {
   // already attached before the navigation it's supposed to catch can start.
   useEffect(() => {
     if (frameRef.current) {
-      frameRef.current.src = "/games/microbyte/index.html";
+      // Next's basePath rewriting only reaches next/link, next/navigation,
+      // and its own bundled asset URLs - not a plain string assigned to an
+      // iframe's src, so the GitHub Pages subpath has to be prefixed by hand.
+      frameRef.current.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/games/microbyte/index.html`;
     }
   }, []);
 
