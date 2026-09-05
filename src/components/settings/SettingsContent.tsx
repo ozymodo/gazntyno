@@ -1,8 +1,10 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import AnimatedTitle from "@/components/common/AnimatedTitle";
 import { Row, Section } from "@/components/common/Panel";
 import {
+  BACKGROUND_COLOR_PRESETS,
   COLOR_PRESETS,
   colorToHex,
   getServerSettingsSnapshot,
@@ -65,8 +67,8 @@ function Toggle({
       style={{ backgroundColor: checked ? `rgba(${accent}, 0.35)` : "rgba(255,255,255,0.06)" }}
     >
       <span
-        className="absolute top-0.5 h-5 w-5 rounded-full bg-white/90 shadow transition-transform duration-200"
-        style={{ transform: checked ? "translateX(22px)" : "translateX(2px)" }}
+        className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white/90 shadow transition-transform duration-200"
+        style={{ transform: checked ? "translateX(20px)" : "translateX(0)" }}
       />
     </button>
   );
@@ -112,17 +114,19 @@ function pillStyle(active: boolean, accent: string) {
     : { borderColor: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.55)" };
 }
 
-/** A row of preset swatches plus a custom color picker, shared by the accent/node/cursor color settings. */
+/** A row of preset swatches plus a custom color picker, shared by the background/accent/node/cursor color settings. */
 function ColorPicker({
   value,
   onChange,
+  presets = COLOR_PRESETS,
 }: {
   value: string;
   onChange: (color: string) => void;
+  presets?: typeof COLOR_PRESETS;
 }) {
   return (
     <div className="flex items-center gap-2">
-      {COLOR_PRESETS.map((preset) => (
+      {presets.map((preset) => (
         <button
           key={preset.label}
           type="button"
@@ -165,14 +169,26 @@ export default function SettingsContent() {
       />
 
       <div className="relative flex flex-col items-center gap-2">
-        <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">SETTINGS</h1>
+        <AnimatedTitle
+          text="SETTINGS"
+          intensity={0.4}
+          accent={accent}
+          className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
+        />
         <p className="max-w-md text-sm text-white/40">
-          Tune how Technature looks and moves for you. Saved on this device.
+          Tune how gazntyno looks and moves for you. Saved on this device.
         </p>
       </div>
 
       <div className="relative flex w-full flex-col items-center gap-8">
         <Section title="Appearance">
+          <Row title="Background color" description="The site's base color, behind the particle scene.">
+            <ColorPicker
+              value={settings.backgroundColor}
+              onChange={(color) => updateSettings({ backgroundColor: color })}
+              presets={BACKGROUND_COLOR_PRESETS}
+            />
+          </Row>
           <Row title="Accent color" description="Colors the wordmark and the home button.">
             <ColorPicker value={accent} onChange={(color) => updateSettings({ accent: color })} />
           </Row>

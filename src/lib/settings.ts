@@ -7,6 +7,8 @@ export type ParticleDensity = "off" | "low" | "standard" | "high";
 export type FontChoice = "sans" | "serif" | "mono";
 
 export type Settings = {
+  /** "r, g, b" - the site's base background color, behind the particle scene. */
+  backgroundColor: string;
   /** "r, g, b" (0-255 each) - matches the `data-accent`/`rgba(${accent}, a)` format already used across the scene.
    *  Colors only the TECHNATURE wordmark/logo and the home nav button. */
   accent: string;
@@ -29,8 +31,8 @@ export type Settings = {
   wordmarkWeight: number;
 };
 
-// Shared by all three color settings below - each just needs a swatch label
-// and an "r, g, b" value.
+// Shared by the accent/node/cursor color settings below - each just needs a
+// swatch label and an "r, g, b" value.
 export const COLOR_PRESETS: ColorPreset[] = [
   { label: "Forest", color: "140, 220, 150" },
   { label: "Ocean", color: "80, 170, 255" },
@@ -39,20 +41,34 @@ export const COLOR_PRESETS: ColorPreset[] = [
   { label: "Rose", color: "240, 110, 140" },
 ];
 
+// Background color needs its own, much darker set - the same hues as
+// COLOR_PRESETS above (so the two pickers still read as "the same five
+// choices"), but a background has to stay near-black to work as one, not a
+// bright accent swatch. Each is that preset's color scaled down to a low,
+// grey-leaning luminance.
+export const BACKGROUND_COLOR_PRESETS: ColorPreset[] = [
+  { label: "Forest", color: "8, 13, 9" },
+  { label: "Ocean", color: "5, 10, 15" },
+  { label: "Amber", color: "14, 11, 4" },
+  { label: "Violet", color: "10, 8, 15" },
+  { label: "Rose", color: "14, 7, 8" },
+];
+
 export const DEFAULT_SETTINGS: Settings = {
-  accent: COLOR_PRESETS[0].color,
-  nodeColor: "143, 255, 153",
-  cursorColor: COLOR_PRESETS[0].color,
+  backgroundColor: "8, 8, 8",
+  accent: "140, 220, 150",
+  nodeColor: "170, 130, 255",
+  cursorColor: "140, 220, 150",
   trailEffect: true,
-  particleDensity: "standard",
+  particleDensity: "high",
   reducedMotion: false,
-  font: "sans",
-  wordmarkFont: "sans",
+  font: "mono",
+  wordmarkFont: "mono",
   // Matches Tailwind's emerald-200 at 40% - the gradient's original fixed
   // end color, kept as the default so nothing looks different out of the box.
   wordmarkColor: "167, 243, 208",
-  wordmarkSize: 1,
-  wordmarkWeight: 600,
+  wordmarkSize: 1.4,
+  wordmarkWeight: 200,
 };
 
 export const WORDMARK_SIZE_MIN = 0.6;
@@ -94,6 +110,7 @@ function sanitize(raw: unknown): Settings {
   if (!raw || typeof raw !== "object") return DEFAULT_SETTINGS;
   const r = raw as Partial<Settings>;
   return {
+    backgroundColor: sanitizeColor(r.backgroundColor, DEFAULT_SETTINGS.backgroundColor),
     accent: sanitizeColor(r.accent, DEFAULT_SETTINGS.accent),
     nodeColor: sanitizeColor(r.nodeColor, DEFAULT_SETTINGS.nodeColor),
     cursorColor: sanitizeColor(r.cursorColor, DEFAULT_SETTINGS.cursorColor),

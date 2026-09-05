@@ -14,7 +14,8 @@ export default function ApplySettings() {
     root.style.setProperty("--font-active", FONT_FAMILY_VAR[settings.font]);
     root.dataset.reducedMotion = String(settings.reducedMotion);
     root.style.setProperty("--wordmark-scale", String(settings.wordmarkSize));
-  }, [settings.font, settings.reducedMotion, settings.wordmarkSize]);
+    root.style.setProperty("--background", `rgb(${settings.backgroundColor})`);
+  }, [settings.font, settings.reducedMotion, settings.wordmarkSize, settings.backgroundColor]);
 
   return null;
 }
