@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
@@ -8,11 +9,31 @@ import { useSceneTransition } from "@/components/scene/scene-context";
 const WORD = "TECHNATURE";
 const LETTERS = WORD.split("");
 
+// Matches HomeContent's layoutId/transition exactly, so the hero title and
+// this button read as the same ten letters flying between pages.
+const LETTER_TRANSITION = { layout: { duration: 0.9, ease: [0.16, 1, 0.3, 1] as const } };
+// While the letters are still mid-flight from the hero title (the shared
+// layoutId transition owns their transform), the physics loop below must
+// not also write to it — so it holds off touching the DOM until this long
+// after mount, comfortably past LETTER_TRANSITION's duration.
+const PHYSICS_ENTRY_DELAY_MS = 950;
+
 const BOX_WIDTH = 260;
 const BOX_HEIGHT = 64;
 const LETTER_BOX = 22;
+const LETTER_HALF = LETTER_BOX / 2;
 const LETTER_RADIUS = 11;
 const HOME_GAP = 20;
+
+// Each letter's tidy, converged resting spot — computed once at module
+// scope so it can be each span's actual CSS position (not a transform) from
+// first paint. That gives the incoming shared-layoutId transition a real,
+// stable rect to land the flying-in hero letters on, before the physics
+// loop wakes up and takes over via transform.
+const HOME_TOTAL_WIDTH = (LETTERS.length - 1) * HOME_GAP;
+const HOME_START_X = BOX_WIDTH / 2 - HOME_TOTAL_WIDTH / 2;
+const HOME_X = LETTERS.map((_, i) => HOME_START_X + i * HOME_GAP);
+const HOME_Y = BOX_HEIGHT / 2;
 const MAX_SPEED = 30;
 const HOVER_IN_RATE = 6; // 1/seconds — converging into the word reads fast/deliberate
 const HOVER_OUT_RATE = 0.8; // releasing back to floaty is a slow, gradual shuffle
@@ -107,9 +128,32 @@ export default function HomeButton() {
 
     let rafId = 0;
     let last = performance.now();
+    let mountTime: number | null = null;
+    let baseOffsetCleared = false;
     const homeY = BOX_HEIGHT / 2;
 
     const tick = (now: number) => {
+      if (mountTime === null) mountTime = now;
+      const settledIn = now - mountTime > PHYSICS_ENTRY_DELAY_MS;
+
+      // The moment physics takes over, drop the CSS left/top each letter
+      // landed on (its handoff target from the hero title) so the physics
+      // loop's own translate isn't stacked on top of it, and pin hoverAmount
+      // to fully-converged so the very first physics-driven frame draws the
+      // letters exactly where they already are — a seamless handoff that
+      // then releases into the idle float, same as a normal mouse-leave.
+      if (settledIn && !baseOffsetCleared) {
+        baseOffsetCleared = true;
+        hoverAmountRef.current = 1;
+        shuffleAwake(bodiesRef.current);
+        for (const el of letterRefs.current) {
+          if (el) {
+            el.style.left = "0px";
+            el.style.top = "0px";
+          }
+        }
+      }
+
       const dt = Math.min((now - last) / 1000, 1 / 30);
       last = now;
 
@@ -163,7 +207,13 @@ export default function HomeButton() {
         const fx = b.x + (homeXRef.current[i] - b.x) * hoverT;
         const fy = b.y + (homeY - b.y) * hoverT;
         const half = LETTER_BOX / 2;
-        el.style.transform = `translate(${(fx - half).toFixed(1)}px, ${(fy - half).toFixed(1)}px)`;
+        // The physics simulation keeps running from mount so nothing jumps
+        // once it takes over, but it only starts writing to the DOM after
+        // the shared layoutId transition (which owns transform until then)
+        // has settled.
+        if (settledIn) {
+          el.style.transform = `translate(${(fx - half).toFixed(1)}px, ${(fy - half).toFixed(1)}px)`;
+        }
 
         const r = Math.round(255 + (234 - 255) * hoverT);
         const g = 255;
@@ -187,8 +237,6 @@ export default function HomeButton() {
     <Link
       ref={linkRef}
       href="/"
-      data-particle-target
-      data-accent="140, 220, 150"
       aria-label="Technature home"
       onClick={(e) => {
         if (!isPlainLeftClick(e)) return;
@@ -214,16 +262,25 @@ export default function HomeButton() {
     >
       <span className="relative block h-full w-full">
         {LETTERS.map((letter, i) => (
-          <span
+          <motion.span
             key={i}
+            layoutId={`home-letter-${i}`}
+            transition={LETTER_TRANSITION}
             ref={(el) => {
               letterRefs.current[i] = el;
             }}
+            data-particle-target
+            data-accent="140, 220, 150"
             className="absolute flex items-center justify-center text-sm text-white/70 sm:text-base"
-            style={{ width: LETTER_BOX, height: LETTER_BOX }}
+            style={{
+              width: LETTER_BOX,
+              height: LETTER_BOX,
+              left: HOME_X[i] - LETTER_HALF,
+              top: HOME_Y - LETTER_HALF,
+            }}
           >
             {letter}
-          </span>
+          </motion.span>
         ))}
       </span>
     </Link>

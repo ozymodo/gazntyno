@@ -1,19 +1,34 @@
 "use client";
 
+import { LayoutGroup } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import HomeButton from "@/components/scene/HomeButton";
 import { SceneContext, type SceneContextValue } from "@/components/scene/scene-context";
 
 const CURSOR_REACH = 170;
 const TARGET_REACH = 230;
+const TARGET_LINK_REACH = 140;
 
 const SPREAD_X = 700;
 const SPREAD_Y = 420;
 const SPREAD_Z = 320;
 
-const SPAWN_POOL = 150;
+// Generous pool: a page dive bursts a few hundred at once (the "dissolve"),
+// so a small pool would just mean the burst eats its own tail.
+const SPAWN_POOL = 700;
+const DIVE_BURST_COUNT = 170;
+const ENTITY_BURST_COUNT = 28;
+
+// Burst particles ease in, hold, then ease back out over their lifetime
+// instead of snapping on/off — and peak below full brightness, so a burst
+// reads as subtle and translucent like the rest of the field rather than a
+// flash. Ambient and click-spawned particles (expiresAt left at Infinity)
+// are untouched by this and stay at full, permanent brightness.
+const BURST_FADE_IN = 0.5;
+const BURST_FADE_OUT = 2.2;
+const BURST_PEAK_ACTIVE = 0.42;
 
 const DEFAULT_ACCENT = "120, 200, 140";
 
@@ -39,7 +54,7 @@ function depthForPath(pathname: string) {
 // little of "the button that was pressed" the deeper you go.
 const ROUTE_ACCENT: Record<string, { color: [number, number, number]; mix: number; line: string }> = {
   "/games": { color: [52 / 255, 199 / 255, 110 / 255], mix: 0.4, line: "90, 210, 140" },
-  "/blog": { color: [45 / 255, 158 / 255, 138 / 255], mix: 0.4, line: "90, 190, 175" },
+  "/blog": { color: [56 / 255, 145 / 255, 255 / 255], mix: 0.4, line: "120, 185, 255" },
   "/media": { color: [214 / 255, 168 / 255, 68 / 255], mix: 0.4, line: "220, 190, 120" },
 };
 const HOME_ACCENT = { color: [0.32, 0.5, 0.34] as [number, number, number], mix: 0, line: "140, 220, 150" };
@@ -51,6 +66,11 @@ function accentForPath(pathname: string) {
 
 function easeInOutCubic(x: number) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function smoothstep(edge0: number, edge1: number, x: number) {
+  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
+  return t * t * (3 - 2 * t);
 }
 
 const VERTEX_SHADER = /* glsl */ `
@@ -105,13 +125,23 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
   const mouse = useRef<{ x: number; y: number } | null>(null);
   const pathnameRef = useRef(pathname);
 
-  const [contentVisible, setContentVisible] = useState(true);
-
   const diveToImplRef = useRef<(href: string, el?: HTMLElement | null) => void>(() => {});
   const diveTo = useCallback((href: string, originEl?: HTMLElement | null) => {
     diveToImplRef.current(href, originEl);
   }, []);
-  const contextValue = useMemo<SceneContextValue>(() => ({ diveTo }), [diveTo]);
+  const burstAtImplRef = useRef<(x: number, y: number, count?: number) => void>(() => {});
+  const burstAt = useCallback((x: number, y: number, count?: number) => {
+    burstAtImplRef.current(x, y, count);
+  }, []);
+  const emitDustImplRef = useRef<(x: number, y: number, count?: number) => void>(() => {});
+  const emitDust = useCallback((x: number, y: number, count?: number) => {
+    emitDustImplRef.current(x, y, count);
+  }, []);
+  const getPointer = useCallback(() => mouse.current, []);
+  const contextValue = useMemo<SceneContextValue>(
+    () => ({ diveTo, burstAt, getPointer, emitDust }),
+    [diveTo, burstAt, getPointer, emitDust],
+  );
 
   useEffect(() => {
     pathnameRef.current = pathname;
@@ -157,6 +187,11 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     const actives = new Float32Array(TOTAL);
     const births = new Float32Array(TOTAL);
     const highlights = new Float32Array(TOTAL);
+    // Burst particles (dive dissolves, entity bursts) fade back out after a
+    // few seconds so a session's worth of transitions doesn't permanently
+    // densify the field; click-spawned ones keep the prior "lasts forever"
+    // behavior (Infinity).
+    const expiresAt = new Float32Array(TOTAL).fill(Infinity);
 
     for (let i = 0; i < BASE_COUNT; i++) {
       positions[i * 3] = (Math.random() * 2 - 1) * SPREAD_X;
@@ -210,15 +245,31 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     const raycaster = new THREE.Raycaster();
     let nextSpawnSlot = 0;
 
-    const spawnParticle = (clientX: number, clientY: number) => {
+    // Projects a screen point onto the particle field's z=0 plane, in the
+    // points object's local space — shared by single clicks and bursts.
+    const screenToLocal = (clientX: number, clientY: number) => {
       const ndcX = (clientX / width) * 2 - 1;
       const ndcY = -(clientY / height) * 2 + 1;
       raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
       const { origin, direction } = raycaster.ray;
-      if (Math.abs(direction.z) < 1e-6) return;
+      if (Math.abs(direction.z) < 1e-6) return null;
       const t = -origin.z / direction.z;
       const world = origin.clone().addScaledVector(direction, t);
-      const local = points.worldToLocal(world);
+      return points.worldToLocal(world);
+    };
+
+    const markDirty = () => {
+      geometry.attributes.position.needsUpdate = true;
+      (geometry.attributes.aPhase as THREE.BufferAttribute).needsUpdate = true;
+      (geometry.attributes.aSpeed as THREE.BufferAttribute).needsUpdate = true;
+      (geometry.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
+      (geometry.attributes.aBirth as THREE.BufferAttribute).needsUpdate = true;
+      (geometry.attributes.aActive as THREE.BufferAttribute).needsUpdate = true;
+    };
+
+    const spawnParticle = (clientX: number, clientY: number) => {
+      const local = screenToLocal(clientX, clientY);
+      if (!local) return;
 
       const idx = BASE_COUNT + nextSpawnSlot;
       nextSpawnSlot = (nextSpawnSlot + 1) % SPAWN_POOL;
@@ -234,13 +285,42 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       sizes[idx] = 55 + Math.random() * 55;
       births[idx] = timer.getElapsed();
       actives[idx] = 1;
+      expiresAt[idx] = Infinity;
 
-      geometry.attributes.position.needsUpdate = true;
-      (geometry.attributes.aPhase as THREE.BufferAttribute).needsUpdate = true;
-      (geometry.attributes.aSpeed as THREE.BufferAttribute).needsUpdate = true;
-      (geometry.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
-      (geometry.attributes.aBirth as THREE.BufferAttribute).needsUpdate = true;
-      (geometry.attributes.aActive as THREE.BufferAttribute).needsUpdate = true;
+      markDirty();
+    };
+
+    // A scatter of many particles at once from one screen point — the
+    // "dissolve" beat for page dives, and shared with other entities (an
+    // opened post, an uploaded photo) via burstAt so the whole site reads
+    // as built from the same drifting field.
+    const burstParticles = (clientX: number, clientY: number, count: number) => {
+      const local = screenToLocal(clientX, clientY);
+      if (!local) return;
+
+      for (let n = 0; n < count; n++) {
+        const idx = BASE_COUNT + nextSpawnSlot;
+        nextSpawnSlot = (nextSpawnSlot + 1) % SPAWN_POOL;
+
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(Math.random() * 2 - 1);
+        const speed = 0.5 + Math.random() * 1.8;
+
+        positions[idx * 3] = local.x + (Math.random() - 0.5) * 4;
+        positions[idx * 3 + 1] = local.y + (Math.random() - 0.5) * 4;
+        positions[idx * 3 + 2] = local.z + (Math.random() - 0.5) * 4;
+        velocities[idx * 3] = Math.sin(phi) * Math.cos(theta) * speed;
+        velocities[idx * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
+        velocities[idx * 3 + 2] = Math.cos(phi) * speed * 0.6;
+        phases[idx] = Math.random() * Math.PI * 2;
+        speeds[idx] = 1 + Math.random() * 1.5;
+        sizes[idx] = 14 + Math.random() * 28;
+        births[idx] = timer.getElapsed();
+        actives[idx] = 0;
+        expiresAt[idx] = timer.getElapsed() + BURST_FADE_IN + 3 + Math.random() * 2 + BURST_FADE_OUT;
+      }
+
+      markDirty();
     };
 
     type Dive = {
@@ -250,6 +330,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       toZ: number;
       href: string;
       pushed: boolean;
+      originClientX: number;
+      originClientY: number;
+      arrivalBurstFired: boolean;
     };
     type Settle = { startTime: number; duration: number; fromZ: number; toZ: number };
 
@@ -259,9 +342,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     let diveAim: { x: number; y: number } | null = null;
     let lastPath = pathnameRef.current;
 
-    // Cursor wake: soft displacement blobs that drift, slowly rise, and
-    // expand while fading — like disturbing a thick, glowing liquid rather
-    // than leaving a spark trail. Faster movement stirs up more of them.
+    // Cursor wake: tiny motes that drift, slowly rise, and fade — like dust
+    // disturbed by something moving through it, not a smoke trail. Faster
+    // movement stirs up more of them.
     type TrailDot = {
       x: number;
       y: number;
@@ -277,26 +360,70 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     const trail: TrailDot[] = [];
     let lastTrailMouse: { x: number; y: number } | null = null;
 
+    // querySelectorAll + getBoundingClientRect force a layout read; doing
+    // that every frame was the single biggest cost in this loop. Targets
+    // (nav orbs, the home button) barely move, so a periodic refresh reads
+    // as instant while cutting that cost by ~15x.
+    type Target = { x: number; y: number; accent: string };
+    let cachedTargets: Target[] = [];
+    let lastTargetsRefresh = -Infinity;
+    const TARGETS_REFRESH_INTERVAL = 0.25;
+
+    // Lets other elements (a hovered letter) borrow the exact same subtle
+    // motes as the cursor's own trail, instead of a separate effect.
+    const emitDust = (x: number, y: number, count: number) => {
+      for (let n = 0; n < count; n++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 8;
+        trail.push({
+          x: x + (Math.random() - 0.5) * 6,
+          y: y + (Math.random() - 0.5) * 6,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 4,
+          born: timer.getElapsed(),
+          life: 0.7 + Math.random() * 0.5,
+          baseSize: 0.6 + Math.random() * 0.6,
+          growth: 1 + Math.random() * 1.5,
+          peakAlpha: 0.14 + Math.random() * 0.1,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      if (trail.length > 90) trail.splice(0, trail.length - 90);
+    };
+    emitDustImplRef.current = (x: number, y: number, count = 2) => emitDust(x, y, count);
+
     diveToImplRef.current = (href: string, originEl?: HTMLElement | null) => {
       if (dive) return;
       let ndcX = targetCam.x;
       let ndcY = targetCam.y;
+      let clientX = width / 2;
+      let clientY = height / 2;
       if (originEl) {
         const rect = originEl.getBoundingClientRect();
-        ndcX = ((rect.left + rect.width / 2) / width - 0.5) * 2;
-        ndcY = ((rect.top + rect.height / 2) / height - 0.5) * 2;
+        clientX = rect.left + rect.width / 2;
+        clientY = rect.top + rect.height / 2;
+        ndcX = (clientX / width - 0.5) * 2;
+        ndcY = (clientY / height - 0.5) * 2;
       }
       diveAim = { x: ndcX, y: ndcY };
       pendingDiveTarget = href;
       dive = {
         startTime: timer.getElapsed(),
-        duration: 1.0,
+        duration: 1.6,
         fromZ: camera.position.z,
         toZ: depthForPath(href),
         href,
         pushed: false,
+        originClientX: clientX,
+        originClientY: clientY,
+        arrivalBurstFired: false,
       };
-      setContentVisible(false);
+      // The page you're leaving dissolves into this burst.
+      burstParticles(clientX, clientY, DIVE_BURST_COUNT);
+    };
+
+    burstAtImplRef.current = (x: number, y: number, count = ENTITY_BURST_COUNT) => {
+      burstParticles(x, y, count);
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -327,12 +454,75 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       lineCanvas.style.width = `${width}px`;
       lineCanvas.style.height = `${height}px`;
       lineCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      lastTargetsRefresh = -Infinity;
     };
     resize();
     window.addEventListener("resize", resize);
 
     const projected = new THREE.Vector3();
     let rafId = 0;
+
+    // Digital-molecule cursor: a soft pulsing core with a few small, dim
+    // satellite orbs drifting around it on tilted, out-of-phase orbits — no
+    // ring outlines or bond lines, just glowing bodies, so it reads as a
+    // tiny organism drifting through the field rather than a textbook
+    // diagram. Each orbit's sine phase doubles as a pseudo-depth: satellites
+    // swinging "toward" the viewer render larger, brighter, and on top.
+    const MOLECULE_ORBS = [
+      { rx: 18, ry: 7, tilt: 0, speed: 0.75, phase: 0 },
+      { rx: 15, ry: 6, tilt: (Math.PI * 2) / 3, speed: 0.6, phase: 2.1 },
+      { rx: 21, ry: 6, tilt: (Math.PI * 4) / 3, speed: 0.5, phase: 4.2 },
+    ];
+
+    const drawCursorMolecule = (cx: number, cy: number, elapsed: number) => {
+      lineCtx.save();
+      lineCtx.translate(cx, cy);
+
+      const orbs = MOLECULE_ORBS.map((orbit) => {
+        const angle = elapsed * orbit.speed + orbit.phase;
+        const localX = Math.cos(angle) * orbit.rx;
+        const localY = Math.sin(angle) * orbit.ry;
+        const x = localX * Math.cos(orbit.tilt) - localY * Math.sin(orbit.tilt);
+        const y = localX * Math.sin(orbit.tilt) + localY * Math.cos(orbit.tilt);
+        const depth = Math.sin(angle) * 0.5 + 0.5; // 0 = far side, 1 = near side
+        return { x, y, depth };
+      }).sort((a, b) => a.depth - b.depth);
+
+      const pulse = 0.88 + 0.12 * Math.sin(elapsed * 1.4);
+
+      for (const orb of orbs) {
+        const size = (2.2 + orb.depth * 1.4) * pulse;
+        const alpha = 0.1 + orb.depth * 0.14;
+        const glow = lineCtx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, size * 2.4);
+        glow.addColorStop(0, `rgba(${currentLineAccent}, ${alpha.toFixed(3)})`);
+        glow.addColorStop(1, `rgba(${currentLineAccent}, 0)`);
+        lineCtx.fillStyle = glow;
+        lineCtx.beginPath();
+        lineCtx.arc(orb.x, orb.y, size * 2.4, 0, Math.PI * 2);
+        lineCtx.fill();
+
+        lineCtx.beginPath();
+        lineCtx.fillStyle = `rgba(255, 255, 255, ${(0.16 + orb.depth * 0.18).toFixed(3)})`;
+        lineCtx.arc(orb.x, orb.y, size, 0, Math.PI * 2);
+        lineCtx.fill();
+      }
+
+      const coreSize = 7 * pulse;
+      const coreGlow = lineCtx.createRadialGradient(0, 0, 0, 0, 0, coreSize * 1.8);
+      coreGlow.addColorStop(0, `rgba(${currentLineAccent}, 0.4)`);
+      coreGlow.addColorStop(1, `rgba(${currentLineAccent}, 0)`);
+      lineCtx.fillStyle = coreGlow;
+      lineCtx.beginPath();
+      lineCtx.arc(0, 0, coreSize * 1.8, 0, Math.PI * 2);
+      lineCtx.fill();
+
+      lineCtx.beginPath();
+      lineCtx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      lineCtx.arc(0, 0, 2.6, 0, Math.PI * 2);
+      lineCtx.fill();
+
+      lineCtx.restore();
+    };
 
     const tick = (timestamp: number) => {
       timer.update(timestamp);
@@ -349,13 +539,22 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           dive = null;
           diveAim = null;
           pendingDiveTarget = null;
-          settle = { startTime: t, duration: 0.6, fromZ: camera.position.z, toZ: depthForPath(newPath) };
-          setContentVisible(true);
+          settle = { startTime: t, duration: 0.9, fromZ: camera.position.z, toZ: depthForPath(newPath) };
         }
       }
 
       const posAttr = geometry.attributes.position as THREE.BufferAttribute;
+      let activeDirty = false;
       for (let i = 0; i < TOTAL; i++) {
+        if (i >= BASE_COUNT && expiresAt[i] !== Infinity) {
+          const age = t - births[i];
+          const remaining = expiresAt[i] - t;
+          const fadeIn = smoothstep(0, BURST_FADE_IN, age);
+          const fadeOut = smoothstep(0, BURST_FADE_OUT, remaining);
+          actives[i] = Math.min(fadeIn, fadeOut) * BURST_PEAK_ACTIVE;
+          activeDirty = true;
+        }
+
         let x = positions[i * 3] + velocities[i * 3];
         let y = positions[i * 3 + 1] + velocities[i * 3 + 1];
         let z = positions[i * 3 + 2] + velocities[i * 3 + 2];
@@ -369,6 +568,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         positions[i * 3 + 1] = y;
         positions[i * 3 + 2] = z;
       }
+      if (activeDirty) (geometry.attributes.aActive as THREE.BufferAttribute).needsUpdate = true;
       posAttr.needsUpdate = true;
 
       points.rotation.y = t * 0.025;
@@ -380,6 +580,12 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       currentAccentMix += (targetAccent.mix - currentAccentMix) * 0.04;
       material.uniforms.uAccentMix.value = currentAccentMix;
       currentLineAccent = targetAccent.line;
+
+      // Drives the DOM content's fade directly off dive/settle progress
+      // instead of a fixed-duration CSS transition, so the page visibly
+      // dissolves early in the dive (leaving only the particle burst and
+      // camera motion), then reassembles once the new page has mounted.
+      let contentOpacity = 1;
 
       if (dive) {
         const progress = Math.min((t - dive.startTime) / dive.duration, 1);
@@ -393,21 +599,28 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           camera.position.y += (-diveAim.y * 60 - camera.position.y) * 0.12;
         }
 
+        contentOpacity = 1 - smoothstep(0, 0.4, progress) + smoothstep(0.62, 1, progress);
+
         if (progress >= 0.55 && !dive.pushed) {
           dive.pushed = true;
           router.push(dive.href);
+        }
+        if (progress >= 0.6 && !dive.arrivalBurstFired) {
+          dive.arrivalBurstFired = true;
+          // The new page reassembles out of this second burst.
+          burstParticles(dive.originClientX, dive.originClientY, Math.round(DIVE_BURST_COUNT * 0.6));
         }
         if (progress >= 1) {
           dive = null;
           diveAim = null;
           camera.fov = 60;
           camera.updateProjectionMatrix();
-          setContentVisible(true);
         }
       } else if (settle) {
         const progress = Math.min((t - settle.startTime) / settle.duration, 1);
         const eased = easeInOutCubic(progress);
         camera.position.z = settle.fromZ + (settle.toZ - settle.fromZ) * eased;
+        contentOpacity = smoothstep(0, 1, progress);
         if (progress >= 1) settle = null;
         camera.position.x += (targetCam.x * 70 - camera.position.x) * 0.04;
         camera.position.y += (-targetCam.y * 45 - camera.position.y) * 0.04;
@@ -420,6 +633,8 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       renderer.render(scene, camera);
 
       if (contentRef.current) {
+        contentRef.current.style.opacity = contentOpacity.toFixed(3);
+        contentRef.current.style.pointerEvents = contentOpacity > 0.4 ? "auto" : "none";
         const rx = -targetCam.y * 5;
         const ry = targetCam.x * 5;
         contentRef.current.style.transform = `perspective(1400px) rotateX(${rx}deg) rotateY(${ry}deg)`;
@@ -447,9 +662,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
               vy: dy / Math.max(dt, 1 / 240) * 0.05 + (Math.random() - 0.5) * 5,
               born: t,
               life: 0.9 + intensity * 0.5 + Math.random() * 0.3,
-              baseSize: 4 + intensity * 5,
-              growth: 9 + intensity * 15,
-              peakAlpha: 0.1 + intensity * 0.16,
+              baseSize: 0.6 + intensity * 0.8,
+              growth: 1.2 + intensity * 1.8,
+              peakAlpha: 0.1 + intensity * 0.14,
               phase: Math.random() * Math.PI * 2,
             });
           }
@@ -460,16 +675,61 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         lastTrailMouse = null;
       }
 
-      const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-particle-target]")).map(
-        (el) => {
+      if (t - lastTargetsRefresh > TARGETS_REFRESH_INTERVAL) {
+        lastTargetsRefresh = t;
+        cachedTargets = Array.from(document.querySelectorAll<HTMLElement>("[data-particle-target]")).map((el) => {
           const rect = el.getBoundingClientRect();
           return {
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height / 2,
             accent: el.dataset.accent || DEFAULT_ACCENT,
           };
-        },
-      );
+        });
+      }
+      const targets = cachedTargets;
+
+      // The cursor draws a line to nearby particles; it draws the same kind
+      // of line straight to a nearby target (a hero letter, a nav orb) too,
+      // once per target rather than per particle.
+      if (m) {
+        for (const tg of targets) {
+          const dx = tg.x - m.x;
+          const dy = tg.y - m.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < TARGET_REACH) {
+            const proximity = 1 - dist / TARGET_REACH;
+            lineCtx.beginPath();
+            lineCtx.moveTo(m.x, m.y);
+            lineCtx.lineTo(tg.x, tg.y);
+            lineCtx.strokeStyle = `rgba(${tg.accent}, ${proximity * 0.5})`;
+            lineCtx.lineWidth = 1;
+            lineCtx.stroke();
+          }
+        }
+      }
+
+      // Targets link up with each other when close together too — this is
+      // what turns a word into a constellation: adjacent hero letters (or
+      // the home button's scattered ones) draw lines between themselves,
+      // not just out to particles and the cursor.
+      for (let a = 0; a < targets.length; a++) {
+        for (let b = a + 1; b < targets.length; b++) {
+          const ta = targets[a];
+          const tb = targets[b];
+          const dx = tb.x - ta.x;
+          const dy = tb.y - ta.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < TARGET_LINK_REACH) {
+            const proximity = 1 - dist / TARGET_LINK_REACH;
+            lineCtx.beginPath();
+            lineCtx.moveTo(ta.x, ta.y);
+            lineCtx.lineTo(tb.x, tb.y);
+            lineCtx.strokeStyle = `rgba(${ta.accent}, ${proximity * 0.35})`;
+            lineCtx.lineWidth = 1;
+            lineCtx.stroke();
+          }
+        }
+      }
 
       for (let i = 0; i < TOTAL; i++) {
         if (actives[i] < 0.5) continue;
@@ -540,16 +800,17 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         const k = age / dot.life;
         const size = dot.baseSize + dot.growth * k;
         const alpha = dot.peakAlpha * (1 - k) * (1 - k);
-        if (alpha <= 0.002) continue;
+        if (alpha <= 0.004) continue;
 
-        const gradient = lineCtx.createRadialGradient(dot.x, dot.y, 0, dot.x, dot.y, size);
-        gradient.addColorStop(0, `rgba(${currentLineAccent}, ${alpha.toFixed(3)})`);
-        gradient.addColorStop(1, `rgba(${currentLineAccent}, 0)`);
-        lineCtx.fillStyle = gradient;
+        // A plain small fill reads as a discrete particle; a soft gradient
+        // at this alpha just smears into a haze.
         lineCtx.beginPath();
+        lineCtx.fillStyle = `rgba(${currentLineAccent}, ${alpha.toFixed(3)})`;
         lineCtx.arc(dot.x, dot.y, size, 0, Math.PI * 2);
         lineCtx.fill();
       }
+
+      if (m) drawCursorMolecule(m.x, m.y, t);
 
       rafId = requestAnimationFrame(tick);
     };
@@ -572,18 +833,15 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     <SceneContext.Provider value={contextValue}>
       <div ref={mountRef} className="fixed inset-0 z-0" />
       <canvas ref={lineCanvasRef} className="pointer-events-none fixed inset-0 z-[1]" />
-      {pathname !== "/" && <HomeButton />}
-      <div
-        ref={contentRef}
-        className="relative z-10 transition-opacity duration-300 ease-out"
-        style={{
-          opacity: contentVisible ? 1 : 0,
-          pointerEvents: contentVisible ? "auto" : "none",
-          transformStyle: "preserve-3d",
-        }}
-      >
-        {children}
-      </div>
+      {/* Shared across routes so the "TECHNATURE" wordmark can hand its
+          letters off between the home hero and this button by layoutId,
+          rather than one fading out while the other fades in. */}
+      <LayoutGroup>
+        {pathname !== "/" && <HomeButton />}
+        <div ref={contentRef} className="relative z-10" style={{ opacity: 1, transformStyle: "preserve-3d" }}>
+          {children}
+        </div>
+      </LayoutGroup>
     </SceneContext.Provider>
   );
 }

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-import type { BlogPost } from "@/lib/blog";
+import type { MediaItem } from "@/lib/media";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -12,14 +12,14 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-export default function PostViewer({
-  post,
+export default function MediaViewer({
+  item,
   layoutId,
   onClose,
   onEdit,
   onDelete,
 }: {
-  post: BlogPost;
+  item: MediaItem;
   layoutId: string;
   onClose: () => void;
   onEdit: () => void;
@@ -37,7 +37,7 @@ export default function PostViewer({
   }, [onClose]);
 
   const handleDelete = () => {
-    if (window.confirm("Delete this post? This can't be undone.")) onDelete();
+    if (window.confirm("Delete this media? This can't be undone.")) onDelete();
   };
 
   return (
@@ -51,30 +51,39 @@ export default function PostViewer({
       <motion.div
         layoutId={layoutId}
         onClick={(e) => e.stopPropagation()}
-        className="relative flex w-full max-w-2xl flex-col rounded-3xl border border-white/10 bg-[#0a120e]/95 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.5)] sm:p-12"
+        className="relative flex w-full max-w-2xl flex-col rounded-3xl border border-white/10 bg-[#0a120e]/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.5)] sm:p-8"
       >
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-6 top-6 text-lg text-white/30 transition-colors hover:text-white/70"
+          className="absolute right-5 top-5 z-10 text-lg text-white/40 transition-colors hover:text-white/80"
         >
           ✕
         </button>
 
-        <h1 className="pr-8 text-2xl font-semibold leading-snug text-white/90 sm:text-3xl">{post.title}</h1>
+        <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-black/30">
+          {item.kind === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.url} alt={item.caption} className="max-h-[65vh] w-full object-contain" />
+          ) : (
+            <video src={item.url} controls className="max-h-[65vh] w-full bg-black" />
+          )}
+        </div>
+
+        <p className="mt-5 text-base leading-relaxed text-white/80">
+          {item.caption || <span className="italic text-white/30">No caption</span>}
+        </p>
         <p className="mt-2 text-xs uppercase tracking-widest text-white/30">
-          {dateFormatter.format(post.createdAt)}
-          {post.updatedAt !== post.createdAt && <> · edited {dateFormatter.format(post.updatedAt)}</>}
+          {dateFormatter.format(item.createdAt)}
+          {item.updatedAt !== item.createdAt && <> · edited {dateFormatter.format(item.updatedAt)}</>}
         </p>
 
-        <p className="mt-6 whitespace-pre-wrap text-base leading-relaxed text-white/75">{post.body}</p>
-
-        <div className="mt-8 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
+        <div className="mt-6 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
           <button onClick={handleDelete} className="text-white/30 transition-colors hover:text-red-300">
             Delete
           </button>
           <button onClick={onEdit} className="text-white/50 transition-colors hover:text-white/90">
-            Edit
+            Edit caption
           </button>
         </div>
       </motion.div>

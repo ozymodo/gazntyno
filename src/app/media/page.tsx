@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import ComingSoon from "@/components/common/ComingSoon";
+import MediaContent from "@/components/media/MediaContent";
 
 export const metadata: Metadata = {
   title: "Media — Technature",
-  description: "Video and media from Technature, coming soon.",
+  description: "Photos and video from Technature.",
 };
 
 export default function MediaPage() {
-  return (
-    <ComingSoon
-      title="MEDIA"
-      tagline="Video and media are still being edited. Check back soon."
-      accent="214, 168, 68"
-    />
-  );
+  return <MediaContent />;
 }

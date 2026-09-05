@@ -18,6 +18,19 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* The 3D scene draws its own atom-like cursor on the particle canvas, so the
+   native pointer is hidden over it — mouse/trackpad only, and only where
+   nothing else claims its own cursor (links, buttons, and text fields keep
+   theirs, since a specified value on the element always wins over this
+   inherited one). Modal overlays opt back into a normal cursor explicitly
+   via `cursor-auto`, since they sit above the canvas and would otherwise
+   hide it behind their backdrop. */
+@media (pointer: fine) {
+  html {
+    cursor: none;
+  }
+}
+
 @keyframes breathe {
   0%,
   100% {
@@ -30,26 +43,10 @@ body {
   }
 }
 
-@keyframes breathe-slow {
-  0%,
-  100% {
-    opacity: 0.85;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.02);
-  }
-}
-
 .animate-breathe {
   animation-name: breathe;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
-}
-
-.animate-breathe-slow {
-  animation: breathe-slow 6s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
@@ -75,11 +72,12 @@ body {
   }
 }
 
-/* Blog orbs pulse (box-shadow only, no transform) and drift (the `translate`
-   property, independent of `transform`) at the same time. Both deliberately
-   avoid the `transform` property, which framer-motion's layoutId animation
-   drives directly when an orb morphs into the editor/viewer overlay — so
-   the CSS animation and the layout animation never fight over one property. */
+/* Blog/media orbs pulse (box-shadow only, no transform) and drift (the
+   `translate` property, independent of `transform`) at the same time. Both
+   deliberately avoid the `transform` property, which framer-motion's
+   layoutId animation drives directly when an orb morphs into the
+   editor/viewer overlay — so the CSS animation and the layout animation
+   never fight over one property. */
 .animate-orb {
   animation:
     pulse-glow var(--orb-breathe-duration, 6.5s) ease-in-out infinite,

@@ -1,27 +1,18 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { type BlogPost, hashSeed, seeded } from "@/lib/blog";
+import type { MouseEvent } from "react";
+import type { BlogPost } from "@/lib/blog";
+import { driftParams, gridPosition, hashSeed } from "@/lib/orbLayout";
+import { useSceneTransition } from "@/components/scene/scene-context";
 
-const ACCENT = "45, 158, 138";
+const ACCENT = "56, 145, 255";
 
 export function orbLayout(post: BlogPost, index: number, total: number) {
   const seed = hashSeed(post.id);
-  const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
-  const rows = Math.max(1, Math.ceil(total / cols));
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-  const cellW = 100 / cols;
-  const cellH = 100 / rows;
-  const jitterX = (seeded(seed, 5) - 0.5) * cellW * 0.7;
-  const jitterY = (seeded(seed, 6) - 0.5) * cellH * 0.7;
-  const left = Math.min(92, Math.max(8, cellW * (col + 0.5) + jitterX));
-  const top = Math.min(88, Math.max(12, cellH * (row + 0.5) + jitterY));
+  const { left, top } = gridPosition(seed, index, total);
   const size = Math.min(136, Math.max(88, 84 + Math.min(post.body.length, 800) / 16));
-  const driftX = 14 + seeded(seed, 7) * 16;
-  const driftY = 10 + seeded(seed, 8) * 14;
-  const duration = 7 + seeded(seed, 9) * 5;
-  const delay = -seeded(seed, 10) * duration;
+  const { driftX, driftY, duration, delay } = driftParams(seed);
   return { left, top, size, driftX, driftY, duration, delay };
 }
 
@@ -37,11 +28,18 @@ export default function PostOrb({
   onOpen: () => void;
 }) {
   const { left, top, size, driftX, driftY, duration, delay } = orbLayout(post, index, total);
+  const { burstAt } = useSceneTransition();
+
+  const handleOpen = (e: MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    burstAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    onOpen();
+  };
 
   return (
     <motion.button
       layoutId={`post-${post.id}`}
-      onClick={onOpen}
+      onClick={handleOpen}
       data-particle-target
       data-accent={ACCENT}
       initial={{ opacity: 0, scale: 0.4 }}

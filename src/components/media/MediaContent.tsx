@@ -3,25 +3,26 @@
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { type MouseEvent, useState, useSyncExternalStore } from "react";
 import {
-  type BlogPost,
-  deletePost,
-  getPostsSnapshot,
-  getServerPostsSnapshot,
-  savePost,
-  subscribePosts,
-} from "@/lib/blog";
-import PostEditor from "@/components/blog/PostEditor";
-import PostOrb from "@/components/blog/PostOrb";
-import PostViewer from "@/components/blog/PostViewer";
+  addMedia,
+  deleteMedia,
+  getMediaSnapshot,
+  getServerMediaSnapshot,
+  type MediaItem,
+  subscribeMedia,
+  updateCaption,
+} from "@/lib/media";
+import MediaEditor from "@/components/media/MediaEditor";
+import MediaOrb from "@/components/media/MediaOrb";
+import MediaViewer from "@/components/media/MediaViewer";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
-const ACCENT = "56, 145, 255";
-const NEW_POST_LAYOUT_ID = "new-post-button";
+const ACCENT = "214, 168, 68";
+const NEW_MEDIA_LAYOUT_ID = "new-media-button";
 
-type Overlay = { type: "new" } | { type: "edit"; post: BlogPost } | { type: "view"; post: BlogPost };
+type Overlay = { type: "new" } | { type: "edit"; item: MediaItem } | { type: "view"; item: MediaItem };
 
-export default function BlogContent() {
-  const posts = useSyncExternalStore(subscribePosts, getPostsSnapshot, getServerPostsSnapshot);
+export default function MediaContent() {
+  const items = useSyncExternalStore(subscribeMedia, getMediaSnapshot, getServerMediaSnapshot);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const { burstAt } = useSceneTransition();
 
@@ -31,18 +32,18 @@ export default function BlogContent() {
     setOverlay({ type: "new" });
   };
 
-  const handleCreate = (title: string, body: string) => {
-    savePost({ title, body });
+  const handleCreate = async (file: File, caption: string) => {
+    await addMedia(file, caption);
     setOverlay(null);
   };
 
-  const handleUpdate = (id: string) => (title: string, body: string) => {
-    savePost({ id, title, body });
+  const handleSave = (id: string) => async (caption: string) => {
+    await updateCaption(id, caption);
     setOverlay(null);
   };
 
-  const handleDelete = (id: string) => {
-    deletePost(id);
+  const handleDelete = async (id: string) => {
+    await deleteMedia(id);
     setOverlay(null);
   };
 
@@ -50,29 +51,29 @@ export default function BlogContent() {
     <LayoutGroup>
       <div className="flex min-h-screen flex-col px-6 py-16">
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">BLOG</h1>
-          <p className="text-sm text-white/40">Posts drift here — click one to open it.</p>
+          <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">MEDIA</h1>
+          <p className="text-sm text-white/40">Snapshots drift here — click one to open it.</p>
         </div>
 
         <div className="relative mt-4 min-h-[65vh] flex-1">
-          {posts.length === 0 && (
+          {items.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="max-w-xs text-center text-sm text-white/30">
-                No posts yet. Click the <span className="text-white/50">+</span> to plant one.
+                Nothing here yet. Click the <span className="text-white/50">+</span> to add a photo or video.
               </p>
             </div>
           )}
 
-          {posts.map((post, index) => {
-            const hidden = (overlay?.type === "edit" || overlay?.type === "view") && overlay.post.id === post.id;
+          {items.map((item, index) => {
+            const hidden = (overlay?.type === "edit" || overlay?.type === "view") && overlay.item.id === item.id;
             if (hidden) return null;
             return (
-              <PostOrb
-                key={post.id}
-                post={post}
+              <MediaOrb
+                key={item.id}
+                item={item}
                 index={index}
-                total={posts.length}
-                onOpen={() => setOverlay({ type: "view", post })}
+                total={items.length}
+                onOpen={() => setOverlay({ type: "view", item })}
               />
             );
           })}
@@ -81,11 +82,11 @@ export default function BlogContent() {
 
       {(!overlay || overlay.type !== "new") && (
         <motion.button
-          layoutId={NEW_POST_LAYOUT_ID}
+          layoutId={NEW_MEDIA_LAYOUT_ID}
           onClick={handleNew}
           data-particle-target
           data-accent={ACCENT}
-          aria-label="Write a new post"
+          aria-label="Add a photo or video"
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 20 }}
@@ -102,26 +103,32 @@ export default function BlogContent() {
 
       <AnimatePresence>
         {overlay?.type === "new" && (
-          <PostEditor key="new" mode="new" layoutId={NEW_POST_LAYOUT_ID} onCancel={() => setOverlay(null)} onSubmit={handleCreate} />
+          <MediaEditor
+            key="new"
+            mode="new"
+            layoutId={NEW_MEDIA_LAYOUT_ID}
+            onCancel={() => setOverlay(null)}
+            onSubmit={handleCreate}
+          />
         )}
         {overlay?.type === "edit" && (
-          <PostEditor
-            key={overlay.post.id}
+          <MediaEditor
+            key={overlay.item.id}
             mode="edit"
-            post={overlay.post}
-            layoutId={`post-${overlay.post.id}`}
-            onCancel={() => setOverlay({ type: "view", post: overlay.post })}
-            onSubmit={handleUpdate(overlay.post.id)}
+            item={overlay.item}
+            layoutId={`media-${overlay.item.id}`}
+            onCancel={() => setOverlay({ type: "view", item: overlay.item })}
+            onSubmit={handleSave(overlay.item.id)}
           />
         )}
         {overlay?.type === "view" && (
-          <PostViewer
-            key={overlay.post.id}
-            post={overlay.post}
-            layoutId={`post-${overlay.post.id}`}
+          <MediaViewer
+            key={overlay.item.id}
+            item={overlay.item}
+            layoutId={`media-${overlay.item.id}`}
             onClose={() => setOverlay(null)}
-            onEdit={() => setOverlay({ type: "edit", post: overlay.post })}
-            onDelete={() => handleDelete(overlay.post.id)}
+            onEdit={() => setOverlay({ type: "edit", item: overlay.item })}
+            onDelete={() => handleDelete(overlay.item.id)}
           />
         )}
       </AnimatePresence>

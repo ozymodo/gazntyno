@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import type { BlogPost } from "@/lib/blog";
 
-const ACCENT = "45, 158, 138";
+const ACCENT = "56, 145, 255";
 
 function autoGrow(el: HTMLTextAreaElement | null) {
   if (!el) return;
@@ -77,7 +77,7 @@ export default function PostEditor({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#040705]/80 px-4 py-10 backdrop-blur-sm sm:py-16"
+      className="fixed inset-0 z-50 flex cursor-auto items-start justify-center overflow-y-auto bg-[#040705]/80 px-4 py-10 backdrop-blur-sm sm:py-16"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

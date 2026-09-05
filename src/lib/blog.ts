@@ -98,19 +98,3 @@ export function savePost(input: { id?: string; title: string; body: string }): B
 export function deletePost(id: string) {
   setCache(getCache().filter((p) => p.id !== id));
 }
-
-// Deterministic pseudo-random from a string seed, so each post's orb settles
-// into the same spot and drift pattern every render/reload without needing
-// to persist layout — same trick as HomeButton's letter scatter.
-export function hashSeed(str: string) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-export function seeded(seed: number, salt: number) {
-  const x = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
