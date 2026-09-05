@@ -157,11 +157,11 @@ export default function AccountContent() {
               onBlur={() => saveNow({ username })}
               placeholder="Anonymous"
               maxLength={40}
-              className="w-48 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-right text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25"
+              className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-left text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25 sm:w-48 sm:text-right"
             />
           </Row>
 
-          <div className="flex items-start justify-between gap-6 py-4 text-left">
+          <div className="flex flex-col gap-3 py-4 text-left sm:flex-row sm:items-start sm:justify-between sm:gap-6">
             <div>
               <p className="text-sm font-medium text-white/85">Bio</p>
               <p className="mt-0.5 max-w-xs text-xs text-white/40">A short line about you.</p>
@@ -176,7 +176,7 @@ export default function AccountContent() {
               placeholder="Say something…"
               maxLength={280}
               rows={2}
-              className="w-56 resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25"
+              className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25 sm:w-56 sm:text-right"
             />
           </div>
 
@@ -190,7 +190,7 @@ export default function AccountContent() {
               onBlur={() => saveNow({ wordmark })}
               placeholder={DEFAULT_WORDMARK}
               maxLength={WORDMARK_MAX_LENGTH}
-              className="w-48 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-right text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25"
+              className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-left text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25 sm:w-48 sm:text-right"
             />
           </Row>
         </Section>

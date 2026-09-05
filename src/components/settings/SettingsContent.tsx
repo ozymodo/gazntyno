@@ -173,7 +173,7 @@ export default function SettingsContent() {
 
       <div className="relative flex w-full flex-col items-center gap-8">
         <Section title="Appearance">
-          <Row title="Accent color" description="Colors the TECHNATURE logo and the home button.">
+          <Row title="Accent color" description="Colors the wordmark and the home button.">
             <ColorPicker value={accent} onChange={(color) => updateSettings({ accent: color })} />
           </Row>
           <Row title="Node color" description="The ambient particles drifting through the scene.">
@@ -239,7 +239,7 @@ export default function SettingsContent() {
         </Section>
 
         <Section title="Landing page title">
-          <Row title="Font" description="Just the TECHNATURE letters, not the whole site.">
+          <Row title="Font" description="Just the wordmark letters, not the whole site.">
             <div className="flex gap-1.5">
               {FONT_OPTIONS.map((opt) => (
                 <button

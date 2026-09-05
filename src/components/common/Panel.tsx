@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 export function Row({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4 text-left">
+    <div className="flex flex-col gap-3 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <div>
         <p className="text-sm font-medium text-white/85">{title}</p>
         {description && <p className="mt-0.5 max-w-xs text-xs text-white/40">{description}</p>}

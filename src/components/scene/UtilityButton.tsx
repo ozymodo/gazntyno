@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import type { FocusEvent, MouseEvent } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 type SubAction = {
@@ -30,6 +30,7 @@ export default function UtilityButton() {
   const { diveTo } = useSceneTransition();
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const clearCloseTimer = () => {
     if (closeTimer.current) {
@@ -48,12 +49,30 @@ export default function UtilityButton() {
     closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
   };
 
+  // Touch devices have no hover, so the button needs its own tap-to-toggle -
+  // and since there's no mouseleave to close it again, a tap anywhere else
+  // on the page dismisses it too, once open.
+  const toggleMenu = () => {
+    clearCloseTimer();
+    setOpen((o) => !o);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: globalThis.MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [open]);
+
   const onBlurCapture = (e: FocusEvent<HTMLDivElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) scheduleClose();
   };
 
   return (
     <div
+      ref={containerRef}
       className="fixed right-6 top-6 z-20 flex flex-col items-end gap-3"
       onMouseEnter={openMenu}
       onMouseLeave={scheduleClose}
@@ -64,6 +83,7 @@ export default function UtilityButton() {
         type="button"
         aria-haspopup="true"
         aria-expanded={open}
+        onClick={toggleMenu}
         data-particle-target
         data-accent="190, 195, 205"
         className="relative flex h-12 items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 text-sm font-medium tracking-wide text-white/80 backdrop-blur-md transition-transform duration-300 hover:scale-105 hover:text-white"
