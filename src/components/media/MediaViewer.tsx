@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-import type { MediaItem } from "@/lib/media";
+import type { FeedMediaItem } from "@/components/media/MediaContent";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -15,12 +15,14 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 export default function MediaViewer({
   item,
   layoutId,
+  canEdit,
   onClose,
   onEdit,
   onDelete,
 }: {
-  item: MediaItem;
+  item: FeedMediaItem;
   layoutId: string;
+  canEdit: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -78,14 +80,16 @@ export default function MediaViewer({
           {item.updatedAt !== item.createdAt && <> · edited {dateFormatter.format(item.updatedAt)}</>}
         </p>
 
-        <div className="mt-6 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
-          <button onClick={handleDelete} className="text-white/30 transition-colors hover:text-red-300">
-            Delete
-          </button>
-          <button onClick={onEdit} className="text-white/50 transition-colors hover:text-white/90">
-            Edit caption
-          </button>
-        </div>
+        {canEdit && (
+          <div className="mt-6 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
+            <button onClick={handleDelete} className="text-white/30 transition-colors hover:text-red-300">
+              Delete
+            </button>
+            <button onClick={onEdit} className="text-white/50 transition-colors hover:text-white/90">
+              Edit caption
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

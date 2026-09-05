@@ -65,7 +65,9 @@ function deleteRecord(id: string): Promise<void> {
 
 // Captures a frame partway into the video as a JPEG blob, so video orbs get
 // a still thumbnail instead of every clip auto-playing at once in the field.
-function generateVideoPoster(file: File): Promise<Blob> {
+// Exported for globalMedia.ts, which needs the same poster for uploads to
+// the shared feed.
+export function generateVideoPoster(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     video.preload = "metadata";

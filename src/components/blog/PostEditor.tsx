@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import type { BlogPost } from "@/lib/blog";
+import type { FeedPost } from "@/components/blog/BlogContent";
 
 const ACCENT = "56, 145, 255";
 
@@ -20,10 +20,10 @@ export default function PostEditor({
   onSubmit,
 }: {
   mode: "new" | "edit";
-  post?: BlogPost;
+  post?: FeedPost;
   layoutId: string;
   onCancel: () => void;
-  onSubmit: (title: string, body: string) => void;
+  onSubmit: (title: string, body: string) => void | Promise<void>;
 }) {
   const [initial] = useState(() => ({ title: post?.title ?? "", body: post?.body ?? "" }));
   const [title, setTitle] = useState(initial.title);

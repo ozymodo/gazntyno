@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect } from "react";
-import type { BlogPost } from "@/lib/blog";
+import type { FeedPost } from "@/components/blog/BlogContent";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -15,12 +15,14 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 export default function PostViewer({
   post,
   layoutId,
+  canEdit,
   onClose,
   onEdit,
   onDelete,
 }: {
-  post: BlogPost;
+  post: FeedPost;
   layoutId: string;
+  canEdit: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -69,14 +71,16 @@ export default function PostViewer({
 
         <p className="mt-6 whitespace-pre-wrap text-base leading-relaxed text-white/75">{post.body}</p>
 
-        <div className="mt-8 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
-          <button onClick={handleDelete} className="text-white/30 transition-colors hover:text-red-300">
-            Delete
-          </button>
-          <button onClick={onEdit} className="text-white/50 transition-colors hover:text-white/90">
-            Edit
-          </button>
-        </div>
+        {canEdit && (
+          <div className="mt-8 flex items-center justify-end gap-3 border-t border-white/10 pt-4 text-sm">
+            <button onClick={handleDelete} className="text-white/30 transition-colors hover:text-red-300">
+              Delete
+            </button>
+            <button onClick={onEdit} className="text-white/50 transition-colors hover:text-white/90">
+              Edit
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

@@ -1,8 +1,18 @@
 "use client";
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { type MouseEvent, useState, useSyncExternalStore } from "react";
+import { type MouseEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { awardMediaUploadXp, awardMediaViewXp } from "@/lib/account";
+import { getCreatorAuthSnapshot, getServerCreatorAuthSnapshot, isOwnerUid, subscribeCreatorAuth } from "@/lib/creatorAuth";
+import {
+  addGlobalMedia,
+  deleteGlobalMedia,
+  type GlobalMediaItem,
+  getGlobalMediaSnapshot,
+  getServerGlobalMediaSnapshot,
+  subscribeGlobalMedia,
+  updateGlobalCaption,
+} from "@/lib/globalMedia";
 import {
   addMedia,
   deleteMedia,
@@ -21,12 +31,27 @@ import { useSceneTransition } from "@/components/scene/scene-context";
 const ACCENT = "214, 168, 68";
 const NEW_MEDIA_LAYOUT_ID = "new-media-button";
 
-type Overlay = { type: "new" } | { type: "edit"; item: MediaItem } | { type: "view"; item: MediaItem };
+// Local items are private to this browser (unchanged); global items come
+// from the creator's live Firestore feed and are visible to everyone.
+export type FeedMediaItem = (MediaItem | GlobalMediaItem) & { source: "local" | "global" };
+
+type Overlay = { type: "new" } | { type: "edit"; item: FeedMediaItem } | { type: "view"; item: FeedMediaItem };
 
 export default function MediaContent() {
-  const items = useSyncExternalStore(subscribeMedia, getMediaSnapshot, getServerMediaSnapshot);
+  const localItems = useSyncExternalStore(subscribeMedia, getMediaSnapshot, getServerMediaSnapshot);
+  const globalItems = useSyncExternalStore(subscribeGlobalMedia, getGlobalMediaSnapshot, getServerGlobalMediaSnapshot);
+  const creatorAuth = useSyncExternalStore(subscribeCreatorAuth, getCreatorAuthSnapshot, getServerCreatorAuthSnapshot);
+  const isOwner = isOwnerUid(creatorAuth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const { burstAt } = useSceneTransition();
+
+  const items = useMemo<FeedMediaItem[]>(() => {
+    const merged: FeedMediaItem[] = [
+      ...localItems.map((i): FeedMediaItem => ({ ...i, source: "local" })),
+      ...globalItems.map((i): FeedMediaItem => ({ ...i, source: "global" })),
+    ];
+    return merged.sort((a, b) => b.createdAt - a.createdAt);
+  }, [localItems, globalItems]);
 
   const handleNew = (e: MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -34,21 +59,31 @@ export default function MediaContent() {
     setOverlay({ type: "new" });
   };
 
+  // Signed in as the creator -> this browser's uploads ARE the live feed.
+  // Otherwise, unchanged local-only behavior.
   const handleCreate = async (file: File, caption: string) => {
-    await addMedia(file, caption);
+    if (isOwner) await addGlobalMedia(file, caption);
+    else await addMedia(file, caption);
     awardMediaUploadXp();
     setOverlay(null);
   };
 
-  const handleSave = (id: string) => async (caption: string) => {
-    await updateCaption(id, caption);
+  const handleSave = (item: FeedMediaItem) => async (caption: string) => {
+    if (item.source === "global") await updateGlobalCaption(item.id, caption);
+    else await updateCaption(item.id, caption);
     setOverlay(null);
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteMedia(id);
+  const handleDelete = (item: FeedMediaItem) => async () => {
+    if (item.source === "global") await deleteGlobalMedia(item.id);
+    else await deleteMedia(item.id);
     setOverlay(null);
   };
+
+  // A local item is always yours to edit. A global item is only yours to
+  // edit if you're signed in as the creator who owns the whole feed -
+  // everyone else just gets to view it.
+  const canEdit = (item: FeedMediaItem) => item.source === "local" || isOwner;
 
   return (
     <LayoutGroup>
@@ -126,7 +161,7 @@ export default function MediaContent() {
             item={overlay.item}
             layoutId={`media-${overlay.item.id}`}
             onCancel={() => setOverlay({ type: "view", item: overlay.item })}
-            onSubmit={handleSave(overlay.item.id)}
+            onSubmit={handleSave(overlay.item)}
           />
         )}
         {overlay?.type === "view" && (
@@ -134,9 +169,10 @@ export default function MediaContent() {
             key={overlay.item.id}
             item={overlay.item}
             layoutId={`media-${overlay.item.id}`}
+            canEdit={canEdit(overlay.item)}
             onClose={() => setOverlay(null)}
             onEdit={() => setOverlay({ type: "edit", item: overlay.item })}
-            onDelete={() => handleDelete(overlay.item.id)}
+            onDelete={handleDelete(overlay.item)}
           />
         )}
       </AnimatePresence>

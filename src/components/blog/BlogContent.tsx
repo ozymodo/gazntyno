@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { type MouseEvent, useState, useSyncExternalStore } from "react";
+import { type MouseEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { awardBlogPostXp } from "@/lib/account";
 import {
   type BlogPost,
@@ -11,6 +11,15 @@ import {
   savePost,
   subscribePosts,
 } from "@/lib/blog";
+import { getCreatorAuthSnapshot, getServerCreatorAuthSnapshot, isOwnerUid, subscribeCreatorAuth } from "@/lib/creatorAuth";
+import {
+  deleteGlobalPost,
+  type GlobalBlogPost,
+  getGlobalPostsSnapshot,
+  getServerGlobalPostsSnapshot,
+  saveGlobalPost,
+  subscribeGlobalPosts,
+} from "@/lib/globalBlog";
 import PostEditor from "@/components/blog/PostEditor";
 import PostOrb from "@/components/blog/PostOrb";
 import PostViewer from "@/components/blog/PostViewer";
@@ -19,12 +28,29 @@ import { useSceneTransition } from "@/components/scene/scene-context";
 const ACCENT = "56, 145, 255";
 const NEW_POST_LAYOUT_ID = "new-post-button";
 
-type Overlay = { type: "new" } | { type: "edit"; post: BlogPost } | { type: "view"; post: BlogPost };
+// Local posts are private to this browser (unchanged); global posts come
+// from the creator's live Firestore feed and are visible to everyone. They
+// share the same shape apart from `source`, so the rest of the tree (orbs,
+// viewer, editor) doesn't need to know which kind it's holding.
+export type FeedPost = (BlogPost | GlobalBlogPost) & { source: "local" | "global" };
+
+type Overlay = { type: "new" } | { type: "edit"; post: FeedPost } | { type: "view"; post: FeedPost };
 
 export default function BlogContent() {
-  const posts = useSyncExternalStore(subscribePosts, getPostsSnapshot, getServerPostsSnapshot);
+  const localPosts = useSyncExternalStore(subscribePosts, getPostsSnapshot, getServerPostsSnapshot);
+  const globalPosts = useSyncExternalStore(subscribeGlobalPosts, getGlobalPostsSnapshot, getServerGlobalPostsSnapshot);
+  const creatorAuth = useSyncExternalStore(subscribeCreatorAuth, getCreatorAuthSnapshot, getServerCreatorAuthSnapshot);
+  const isOwner = isOwnerUid(creatorAuth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const { burstAt } = useSceneTransition();
+
+  const posts = useMemo<FeedPost[]>(() => {
+    const merged: FeedPost[] = [
+      ...localPosts.map((p): FeedPost => ({ ...p, source: "local" })),
+      ...globalPosts.map((p): FeedPost => ({ ...p, source: "global" })),
+    ];
+    return merged.sort((a, b) => b.createdAt - a.createdAt);
+  }, [localPosts, globalPosts]);
 
   const handleNew = (e: MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -32,21 +58,31 @@ export default function BlogContent() {
     setOverlay({ type: "new" });
   };
 
-  const handleCreate = (title: string, body: string) => {
-    savePost({ title, body });
+  // Signed in as the creator -> this browser's posts ARE the live feed.
+  // Otherwise, unchanged local-only behavior.
+  const handleCreate = async (title: string, body: string) => {
+    if (isOwner) await saveGlobalPost({ title, body });
+    else savePost({ title, body });
     awardBlogPostXp();
     setOverlay(null);
   };
 
-  const handleUpdate = (id: string) => (title: string, body: string) => {
-    savePost({ id, title, body });
+  const handleUpdate = (post: FeedPost) => async (title: string, body: string) => {
+    if (post.source === "global") await saveGlobalPost({ id: post.id, title, body });
+    else savePost({ id: post.id, title, body });
     setOverlay(null);
   };
 
-  const handleDelete = (id: string) => {
-    deletePost(id);
+  const handleDelete = (post: FeedPost) => async () => {
+    if (post.source === "global") await deleteGlobalPost(post.id);
+    else deletePost(post.id);
     setOverlay(null);
   };
+
+  // A local post is always yours to edit. A global post is only yours to
+  // edit if you're signed in as the creator who owns the whole feed -
+  // everyone else just gets to read it.
+  const canEdit = (post: FeedPost) => post.source === "local" || isOwner;
 
   return (
     <LayoutGroup>
@@ -113,7 +149,7 @@ export default function BlogContent() {
             post={overlay.post}
             layoutId={`post-${overlay.post.id}`}
             onCancel={() => setOverlay({ type: "view", post: overlay.post })}
-            onSubmit={handleUpdate(overlay.post.id)}
+            onSubmit={handleUpdate(overlay.post)}
           />
         )}
         {overlay?.type === "view" && (
@@ -121,9 +157,10 @@ export default function BlogContent() {
             key={overlay.post.id}
             post={overlay.post}
             layoutId={`post-${overlay.post.id}`}
+            canEdit={canEdit(overlay.post)}
             onClose={() => setOverlay(null)}
             onEdit={() => setOverlay({ type: "edit", post: overlay.post })}
-            onDelete={() => handleDelete(overlay.post.id)}
+            onDelete={handleDelete(overlay.post)}
           />
         )}
       </AnimatePresence>

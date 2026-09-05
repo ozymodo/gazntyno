@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import type { MouseEvent } from "react";
-import type { MediaItem } from "@/lib/media";
+import type { FeedMediaItem } from "@/components/media/MediaContent";
 import { driftParams, gridPosition, hashSeed, seeded } from "@/lib/orbLayout";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
@@ -14,7 +14,7 @@ export default function MediaOrb({
   total,
   onOpen,
 }: {
-  item: MediaItem;
+  item: FeedMediaItem;
   index: number;
   total: number;
   onOpen: () => void;

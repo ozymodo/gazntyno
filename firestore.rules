@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Anyone can read the shared feed; only the site's one creator account
+// (matched by uid, not by anything client-supplied) can write to it. Set
+// OWNER_UID below to the same value as NEXT_PUBLIC_OWNER_UID.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null && request.auth.uid == "REPLACE_WITH_YOUR_OWNER_UID";
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    match /media/{mediaId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+  }
+}

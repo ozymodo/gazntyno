@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import type { MediaItem } from "@/lib/media";
+import type { FeedMediaItem } from "@/components/media/MediaContent";
 
 const ACCENT = "214, 168, 68";
 
@@ -15,7 +15,7 @@ function autoGrow(el: HTMLTextAreaElement | null) {
 
 type Props =
   | { mode: "new"; layoutId: string; onCancel: () => void; onSubmit: (file: File, caption: string) => Promise<void> }
-  | { mode: "edit"; item: MediaItem; layoutId: string; onCancel: () => void; onSubmit: (caption: string) => Promise<void> };
+  | { mode: "edit"; item: FeedMediaItem; layoutId: string; onCancel: () => void; onSubmit: (caption: string) => Promise<void> };
 
 export default function MediaEditor(props: Props) {
   const { mode, layoutId, onCancel } = props;

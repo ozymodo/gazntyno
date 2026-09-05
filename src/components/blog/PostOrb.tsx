@@ -2,13 +2,13 @@
 
 import { motion } from "framer-motion";
 import type { MouseEvent } from "react";
-import type { BlogPost } from "@/lib/blog";
+import type { FeedPost } from "@/components/blog/BlogContent";
 import { driftParams, gridPosition, hashSeed } from "@/lib/orbLayout";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const ACCENT = "56, 145, 255";
 
-export function orbLayout(post: BlogPost, index: number, total: number) {
+export function orbLayout(post: FeedPost, index: number, total: number) {
   const seed = hashSeed(post.id);
   const { left, top } = gridPosition(seed, index, total);
   const titleLength = post.title.trim().length || 1;
@@ -28,7 +28,7 @@ export default function PostOrb({
   total,
   onOpen,
 }: {
-  post: BlogPost;
+  post: FeedPost;
   index: number;
   total: number;
   onOpen: () => void;

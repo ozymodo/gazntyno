@@ -14,6 +14,7 @@ import {
   WORDMARK_MAX_LENGTH,
 } from "@/lib/account";
 import { Row, Section } from "@/components/common/Panel";
+import CreatorSignIn from "@/components/account/CreatorSignIn";
 
 const ACCENT = "210, 180, 220";
 // Local state persists on a short debounce rather than every keystroke, so
@@ -223,6 +224,8 @@ export default function AccountContent() {
             ))}
           </div>
         </Section>
+
+        <CreatorSignIn />
       </div>
     </div>
   );
