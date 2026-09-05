@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { type MouseEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { type MouseEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { awardMediaUploadXp, awardMediaViewXp } from "@/lib/account";
 import { getAuthSnapshot, getServerAuthSnapshot, isOwnerUid, subscribeAuth } from "@/lib/auth";
 import {
@@ -43,7 +43,16 @@ export default function MediaContent() {
   const auth = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getServerAuthSnapshot);
   const isOwner = isOwnerUid(auth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
-  const { burstAt } = useSceneTransition();
+  const { burstAt, setUtilityVisible } = useSceneTransition();
+
+  // The Utility button floats above everything, so it overlaps a full-screen
+  // media viewer/editor unless it's hidden while one's open - restored on
+  // close, and on unmount in case this page goes away mid-overlay (e.g. a
+  // dive triggered some other way).
+  useEffect(() => {
+    setUtilityVisible(overlay === null);
+    return () => setUtilityVisible(true);
+  }, [overlay, setUtilityVisible]);
 
   const items = useMemo<FeedMediaItem[]>(() => {
     const merged: FeedMediaItem[] = [
@@ -87,7 +96,7 @@ export default function MediaContent() {
 
   return (
     <LayoutGroup>
-      <div className="flex min-h-screen flex-col px-6 py-16">
+      <div className="flex h-dvh touch-none flex-col px-6 py-16">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">MEDIA</h1>
           <p className="text-sm text-white/40">Snapshots drift here — click one to open it.</p>

@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import type { MouseEvent } from "react";
 import type { FeedMediaItem } from "@/components/media/MediaContent";
-import { driftParams, gridPosition, hashSeed, seeded } from "@/lib/orbLayout";
+import { clampedAxis, driftParams, edgeMargin, gridPosition, hashSeed, seeded } from "@/lib/orbLayout";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const ACCENT = "214, 168, 68";
@@ -45,8 +45,8 @@ export default function MediaOrb({
       className="animate-orb group absolute overflow-hidden rounded-full border border-white/15 bg-white/5 backdrop-blur-md transition-[border-color] duration-300 hover:border-white/30"
       style={
         {
-          left: `${left}%`,
-          top: `${top}%`,
+          left: clampedAxis(left, edgeMargin(size, driftX)),
+          top: clampedAxis(top, edgeMargin(size, driftY)),
           width: size,
           height: size,
           translate: "-50% -50%",

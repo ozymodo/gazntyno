@@ -174,7 +174,7 @@ export default function HomeContent() {
   }, [getPointer, emitDust, wordmark]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center gap-14 px-6 pt-20 text-center sm:pt-28">
+    <div className="flex h-dvh touch-none flex-col items-center gap-14 px-6 pt-20 text-center sm:pt-28">
       <AccountBadge />
       <div className="flex flex-col items-center gap-4">
         <h1 className="wordmark-text flex items-baseline font-semibold tracking-[0.2em] drop-shadow-[0_0_25px_rgba(80,200,120,0.35)]">

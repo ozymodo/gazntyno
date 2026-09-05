@@ -70,7 +70,7 @@ export default function MicrobytePlayer() {
   }, []);
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center gap-8 px-6 py-24">
+    <div className="relative flex h-dvh touch-pan-y flex-col items-center gap-8 overflow-y-auto px-6 py-24">
       <div
         className="pointer-events-none absolute top-24 h-72 w-72 rounded-full opacity-25 blur-3xl"
         style={{ background: `radial-gradient(circle, rgba(${ACCENT}, 0.5), transparent 70%)` }}

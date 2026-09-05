@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { type MouseEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { type MouseEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { awardBlogPostXp } from "@/lib/account";
 import {
   type BlogPost,
@@ -42,7 +42,16 @@ export default function BlogContent() {
   const auth = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getServerAuthSnapshot);
   const isOwner = isOwnerUid(auth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
-  const { burstAt } = useSceneTransition();
+  const { burstAt, setUtilityVisible } = useSceneTransition();
+
+  // The Utility button floats above everything, so it overlaps a full-screen
+  // post viewer/editor unless it's hidden while one's open - restored on
+  // close, and on unmount in case this page goes away mid-overlay (e.g. a
+  // dive triggered some other way).
+  useEffect(() => {
+    setUtilityVisible(overlay === null);
+    return () => setUtilityVisible(true);
+  }, [overlay, setUtilityVisible]);
 
   const posts = useMemo<FeedPost[]>(() => {
     const merged: FeedPost[] = [
@@ -86,7 +95,7 @@ export default function BlogContent() {
 
   return (
     <LayoutGroup>
-      <div className="flex min-h-screen flex-col px-6 py-16">
+      <div className="flex h-dvh touch-none flex-col px-6 py-16">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">BLOG</h1>
           <p className="text-sm text-white/40">Posts drift here — click one to open it.</p>

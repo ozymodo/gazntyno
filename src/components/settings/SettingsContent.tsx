@@ -158,7 +158,7 @@ export default function SettingsContent() {
   const { accent } = settings;
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center gap-10 px-6 py-24 text-center">
+    <div className="relative flex h-dvh touch-pan-y flex-col items-center gap-10 overflow-y-auto px-6 py-24 text-center">
       <div
         className="pointer-events-none absolute left-1/2 top-24 h-72 w-72 -translate-x-1/2 rounded-full opacity-25 blur-3xl"
         style={{ background: `radial-gradient(circle, rgba(${accent}, 0.5), transparent 70%)` }}

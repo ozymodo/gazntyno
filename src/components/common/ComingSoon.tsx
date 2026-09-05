@@ -8,7 +8,7 @@ export default function ComingSoon({
   accent?: string;
 }) {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="relative flex h-dvh touch-none flex-col items-center justify-center gap-4 px-6 text-center">
       <div
         className="pointer-events-none absolute h-72 w-72 rounded-full opacity-30 blur-3xl"
         style={{ background: `radial-gradient(circle, rgba(${accent}, 0.5), transparent 70%)` }}

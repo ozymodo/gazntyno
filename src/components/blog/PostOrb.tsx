@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import type { MouseEvent } from "react";
 import type { FeedPost } from "@/components/blog/BlogContent";
-import { driftParams, gridPosition, hashSeed } from "@/lib/orbLayout";
+import { clampedAxis, driftParams, edgeMargin, gridPosition, hashSeed } from "@/lib/orbLayout";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const ACCENT = "56, 145, 255";
@@ -55,8 +55,8 @@ export default function PostOrb({
       className="animate-orb group absolute flex items-center justify-center rounded-full border border-white/15 bg-white/5 p-3 text-center backdrop-blur-md transition-[border-color] duration-300 hover:border-white/30"
       style={
         {
-          left: `${left}%`,
-          top: `${top}%`,
+          left: clampedAxis(left, edgeMargin(size, driftX)),
+          top: clampedAxis(top, edgeMargin(size, driftY)),
           width: size,
           height: size,
           translate: "-50% -50%",

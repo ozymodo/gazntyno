@@ -40,3 +40,27 @@ export function driftParams(seed: number): OrbDrift {
   const delay = -seeded(seed, 10) * duration;
   return { driftX, driftY, duration, delay };
 }
+
+/**
+ * How far an orb's center must stay from its container's edge on one axis -
+ * half its own size (so its edge, not just its center, stays inside) plus
+ * however far the drift animation swings it on that axis (so the drift's
+ * peak offset doesn't push it past the edge either).
+ */
+export function edgeMargin(size: number, drift: number): number {
+  return size / 2 + drift;
+}
+
+/**
+ * A CSS `left`/`top` value that keeps an orb fully inside its container -
+ * `gridPosition`'s percentage is container-size-agnostic, so on a narrow
+ * (mobile) container a large orb positioned near the percentage clamp's
+ * edge can still spill past the actual edge. `clamp()` re-clamps that same
+ * percentage against real pixel margins at render time, in CSS, so it stays
+ * correct across any viewport/resize with no measurement or JS involved -
+ * the orb reads as gently turning back before it reaches the "wall" rather
+ * than drifting off-screen.
+ */
+export function clampedAxis(percent: number, margin: number): string {
+  return `clamp(${margin}px, ${percent}%, calc(100% - ${margin}px))`;
+}

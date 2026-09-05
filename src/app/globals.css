@@ -76,6 +76,20 @@ html {
   -webkit-touch-callout: none;
 }
 
+/* The spatial pages (Home/Games/Blog/Media) are sized to exactly fill the
+   viewport (see their `h-dvh` root) and have nothing that needs scrolling -
+   Account/Settings are the deliberate exception, scrolling inside their own
+   `overflow-y-auto` container instead of the document. Without this, mobile
+   Safari/Chrome still treat the document as draggable-to-bounce even where
+   there's nothing to reveal, which is exactly the "cheap" rubber-banding
+   this removes. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 @keyframes breathe {
   0%,
   100% {
