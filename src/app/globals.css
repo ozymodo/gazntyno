@@ -60,6 +60,22 @@ body {
   }
 }
 
+/* Mobile: SceneProvider tracks a dragging finger the same way it tracks the
+   mouse (via pointermove) to drive the same cursor/particle-highlight
+   effect. Without this, the browser reads that drag as a text/element
+   selection gesture (or, on iOS, a press-and-hold callout) - fighting the
+   drag instead of letting it just move the cursor. Native form controls are
+   unaffected: an `<input>`/`<textarea>`'s own text stays selectable/editable
+   regardless of an ancestor's `user-select`. `manipulation` additionally
+   drops the double-tap-to-zoom delay on taps (buttons, orbs, ...) without
+   touching scrolling or pinch-zoom. */
+html {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 @keyframes breathe {
   0%,
   100% {

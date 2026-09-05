@@ -92,7 +92,11 @@ export default function BlogContent() {
           <p className="text-sm text-white/40">Posts drift here — click one to open it.</p>
         </div>
 
-        <div className="relative mt-4 min-h-[65vh] flex-1">
+        <div
+          className={`relative mt-4 min-h-[65vh] flex-1 transition-opacity duration-300 ${
+            overlay ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
+        >
           {posts.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="max-w-xs text-center text-sm text-white/30">
