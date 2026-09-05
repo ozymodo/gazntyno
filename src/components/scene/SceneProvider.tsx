@@ -1313,9 +1313,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     <SceneContext.Provider value={contextValue}>
       <div ref={mountRef} className="fixed inset-0 z-0" />
       <canvas ref={lineCanvasRef} className="pointer-events-none fixed inset-0 z-[1]" />
-      {/* Shared across routes so the "TECHNATURE" wordmark can hand its
-          letters off between the home hero and this button by layoutId,
-          rather than one fading out while the other fades in. */}
+      {/* Shared across routes so the wordmark can hand its letters off
+          between the home hero and this button by layoutId, rather than
+          one fading out while the other fades in. */}
       <LayoutGroup>
         {/* HomeButton/UtilityButton live inside this same fading wrapper (not
             as separate siblings) so freeroam dissolving `children` dissolves

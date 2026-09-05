@@ -3,15 +3,14 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import type { MouseEvent } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { DEFAULT_WORDMARK, getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
 import { useSceneTransition } from "@/components/scene/scene-context";
 import { getSettingsSnapshot } from "@/lib/settings";
 
-const WORD = "TECHNATURE";
-const LETTERS = WORD.split("");
-
 // Matches HomeContent's layoutId/transition exactly, so the hero title and
-// this button read as the same ten letters flying between pages.
+// this button read as the same letters flying between pages. Both read the
+// same Account > Homepage text, falling back to DEFAULT_WORDMARK when unset.
 const LETTER_TRANSITION = { layout: { duration: 0.9, ease: [0.16, 1, 0.3, 1] as const } };
 // While the letters are still mid-flight from the hero title (the shared
 // layoutId transition owns their transform), the physics loop below must
@@ -25,15 +24,6 @@ const LETTER_BOX = 22;
 const LETTER_HALF = LETTER_BOX / 2;
 const LETTER_RADIUS = 11;
 const HOME_GAP = 20;
-
-// Each letter's tidy, converged resting spot — computed once at module
-// scope so it can be each span's actual CSS position (not a transform) from
-// first paint. That gives the incoming shared-layoutId transition a real,
-// stable rect to land the flying-in hero letters on, before the physics
-// loop wakes up and takes over via transform.
-const HOME_TOTAL_WIDTH = (LETTERS.length - 1) * HOME_GAP;
-const HOME_START_X = BOX_WIDTH / 2 - HOME_TOTAL_WIDTH / 2;
-const HOME_X = LETTERS.map((_, i) => HOME_START_X + i * HOME_GAP);
 const HOME_Y = BOX_HEIGHT / 2;
 const MAX_SPEED = 30;
 const HOVER_IN_RATE = 6; // 1/seconds — converging into the word reads fast/deliberate
@@ -100,6 +90,11 @@ function shuffleAwake(bodies: Body[]) {
 
 export default function HomeButton() {
   const { diveTo } = useSceneTransition();
+  const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot, getServerAccountSnapshot);
+  const wordmarkText = account.wordmark || DEFAULT_WORDMARK;
+  // Split by code point (not raw .split("")), so a custom wordmark with a
+  // multi-byte character doesn't get sliced into broken halves.
+  const letters = useMemo(() => Array.from(wordmarkText), [wordmarkText]);
   const linkRef = useRef<HTMLAnchorElement>(null);
   const letterRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const bodiesRef = useRef<Body[]>([]);
@@ -107,12 +102,20 @@ export default function HomeButton() {
   const hoverAmountRef = useRef(0);
   const hoveredRef = useRef(false);
 
-  useEffect(() => {
-    const totalWidth = (LETTERS.length - 1) * HOME_GAP;
+  // Each letter's tidy, converged resting spot, re-derived whenever the
+  // wordmark's letter count changes — the incoming shared-layoutId
+  // transition needs a real, stable rect to land the flying-in hero letters
+  // on, before the physics loop below wakes up and takes over via transform.
+  const homeX = useMemo(() => {
+    const totalWidth = (letters.length - 1) * HOME_GAP;
     const startX = BOX_WIDTH / 2 - totalWidth / 2;
-    homeXRef.current = LETTERS.map((_, i) => startX + i * HOME_GAP);
+    return letters.map((_, i) => startX + i * HOME_GAP);
+  }, [letters]);
 
-    bodiesRef.current = LETTERS.map((_, i) => ({
+  useEffect(() => {
+    homeXRef.current = homeX;
+
+    bodiesRef.current = letters.map((_, i) => ({
       x: LETTER_RADIUS + seeded(i, 0) * (BOX_WIDTH - LETTER_RADIUS * 2),
       y: LETTER_RADIUS + seeded(i, 1) * (BOX_HEIGHT - LETTER_RADIUS * 2),
       vx: (seeded(i, 2) - 0.5) * 20,
@@ -212,7 +215,7 @@ export default function HomeButton() {
         }
       }
 
-      for (let i = 0; i < LETTERS.length; i++) {
+      for (let i = 0; i < letters.length; i++) {
         const el = letterRefs.current[i];
         if (!el) continue;
         const b = bodies[i];
@@ -244,13 +247,13 @@ export default function HomeButton() {
     rafId = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(rafId);
-  }, []);
+  }, [letters, homeX]);
 
   return (
     <Link
       ref={linkRef}
       href="/"
-      aria-label="Technature home"
+      aria-label={`${wordmarkText} home`}
       onClick={(e) => {
         if (!isPlainLeftClick(e)) return;
         e.preventDefault();
@@ -274,7 +277,7 @@ export default function HomeButton() {
       style={{ width: BOX_WIDTH, height: BOX_HEIGHT }}
     >
       <span className="relative block h-full w-full">
-        {LETTERS.map((letter, i) => (
+        {letters.map((letter, i) => (
           <motion.span
             key={i}
             layoutId={`home-letter-${i}`}
@@ -288,7 +291,7 @@ export default function HomeButton() {
             style={{
               width: LETTER_BOX,
               height: LETTER_BOX,
-              left: HOME_X[i] - LETTER_HALF,
+              left: homeX[i] - LETTER_HALF,
               top: HOME_Y - LETTER_HALF,
             }}
           >

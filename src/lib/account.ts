@@ -10,11 +10,20 @@ export type AccountStats = {
 export type Account = {
   username: string;
   bio: string;
+  /** Custom text for the animated landing-page title/nav wordmark, in place of the site default. Empty string falls back to DEFAULT_WORDMARK wherever it's rendered. */
+  wordmark: string;
   xp: number;
   stats: AccountStats;
   /** Object URL for the stored profile picture blob, or null if none is set. Not persisted directly - derived from IndexedDB at load time. */
   pictureUrl: string | null;
 };
+
+/** The site's out-of-the-box wordmark text, used whenever an account has no custom one set. */
+export const DEFAULT_WORDMARK = "GAZNTYNO";
+// Keeps the animated letters (physics-simulated in HomeButton, cursor-repelled
+// in HomeContent) from growing wide enough to look broken or collide with
+// other fixed-position UI - comfortably more than the default's 8 letters.
+export const WORDMARK_MAX_LENGTH = 16;
 
 export function usernameInitials(username: string): string {
   const trimmed = username.trim();
@@ -43,6 +52,7 @@ const DEFAULT_STATS: AccountStats = {
 const DEFAULT_ACCOUNT: Account = {
   username: "",
   bio: "",
+  wordmark: "",
   xp: 0,
   stats: DEFAULT_STATS,
   pictureUrl: null,
@@ -71,6 +81,9 @@ function sanitize(raw: unknown): PersistedFields {
   return {
     username: typeof r.username === "string" ? r.username.slice(0, 40) : DEFAULT_ACCOUNT.username,
     bio: typeof r.bio === "string" ? r.bio.slice(0, 280) : DEFAULT_ACCOUNT.bio,
+    // Sliced by code point (not UTF-16 length), so a multi-byte character
+    // near the cap doesn't get split in half.
+    wordmark: typeof r.wordmark === "string" ? Array.from(r.wordmark).slice(0, WORDMARK_MAX_LENGTH).join("") : DEFAULT_ACCOUNT.wordmark,
     xp: typeof r.xp === "number" && r.xp >= 0 ? r.xp : DEFAULT_ACCOUNT.xp,
     stats: {
       posts: typeof stats.posts === "number" ? stats.posts : DEFAULT_STATS.posts,
@@ -96,8 +109,8 @@ function readFromStorage(): PersistedFields {
 
 function persist() {
   if (typeof window !== "undefined") {
-    const { username, bio, xp, stats } = cache;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ username, bio, xp, stats }));
+    const { username, bio, wordmark, xp, stats } = cache;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ username, bio, wordmark, xp, stats }));
   }
 }
 
@@ -134,7 +147,7 @@ export function getServerAccountSnapshot(): Account {
   return DEFAULT_ACCOUNT;
 }
 
-export function updateProfile(partial: { username?: string; bio?: string }) {
+export function updateProfile(partial: { username?: string; bio?: string; wordmark?: string }) {
   ensureHydrated();
   cache = { ...sanitize({ ...cache, ...partial }), pictureUrl: cache.pictureUrl };
   persist();

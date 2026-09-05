@@ -3,6 +3,7 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import {
   clearProfilePicture,
+  DEFAULT_WORDMARK,
   getAccountSnapshot,
   getServerAccountSnapshot,
   levelProgress,
@@ -10,6 +11,7 @@ import {
   subscribeAccount,
   updateProfile,
   usernameInitials,
+  WORDMARK_MAX_LENGTH,
 } from "@/lib/account";
 import { Row, Section } from "@/components/common/Panel";
 
@@ -42,14 +44,16 @@ export default function AccountContent() {
   // shown once there's no in-progress edit.
   const [draftUsername, setDraftUsername] = useState<string | null>(null);
   const [draftBio, setDraftBio] = useState<string | null>(null);
+  const [draftWordmark, setDraftWordmark] = useState<string | null>(null);
   const [pictureError, setPictureError] = useState<string | null>(null);
   const username = draftUsername ?? account.username;
   const bio = draftBio ?? account.bio;
+  const wordmark = draftWordmark ?? account.wordmark;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Accumulates edits across both fields, so debouncing one doesn't drop a
-  // change to the other made just before it (e.g. tabbing from username to
-  // bio within the debounce window).
-  const pending = useRef<{ username?: string; bio?: string }>({});
+  // Accumulates edits across all three fields, so debouncing one doesn't drop
+  // a change to another made just before it (e.g. tabbing between fields
+  // within the debounce window).
+  const pending = useRef<{ username?: string; bio?: string; wordmark?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const flush = () => {
@@ -63,15 +67,16 @@ export default function AccountContent() {
     }
     setDraftUsername(null);
     setDraftBio(null);
+    setDraftWordmark(null);
   };
 
-  const scheduleSave = (next: { username?: string; bio?: string }) => {
+  const scheduleSave = (next: { username?: string; bio?: string; wordmark?: string }) => {
     pending.current = { ...pending.current, ...next };
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
   };
 
-  const saveNow = (next: { username?: string; bio?: string }) => {
+  const saveNow = (next: { username?: string; bio?: string; wordmark?: string }) => {
     pending.current = { ...pending.current, ...next };
     flush();
   };
@@ -174,6 +179,20 @@ export default function AccountContent() {
               className="w-56 resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25"
             />
           </div>
+
+          <Row title="Homepage text" description="Replaces the animated title on your landing page and its nav button.">
+            <input
+              value={wordmark}
+              onChange={(e) => {
+                setDraftWordmark(e.target.value);
+                scheduleSave({ wordmark: e.target.value });
+              }}
+              onBlur={() => saveNow({ wordmark })}
+              placeholder={DEFAULT_WORDMARK}
+              maxLength={WORDMARK_MAX_LENGTH}
+              className="w-48 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-right text-sm text-white/85 outline-none placeholder:text-white/25 focus:border-white/25"
+            />
+          </Row>
         </Section>
 
         <Section title="Progress">
