@@ -9,6 +9,7 @@ import {
   setProfilePicture,
   subscribeAccount,
   updateProfile,
+  usernameInitials,
 } from "@/lib/account";
 import { Row, Section } from "@/components/common/Panel";
 
@@ -18,19 +19,16 @@ const ACCENT = "210, 180, 220";
 // so nothing's lost if the field never sits idle long enough to fire.
 const SAVE_DEBOUNCE_MS = 500;
 
-function initials(username: string) {
-  const trimmed = username.trim();
-  if (!trimmed) return "?";
-  const parts = trimmed.split(/\s+/);
-  return parts.length === 1 ? trimmed.slice(0, 2).toUpperCase() : (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-const STAT_LABELS: { key: "posts" | "mediaAdded" | "mediaViewed" | "pagesVisited" | "minutesPlayed"; label: string }[] = [
+const STAT_LABELS: {
+  key: "posts" | "mediaAdded" | "mediaViewed" | "pagesVisited" | "minutesPlayed" | "nodesCreated";
+  label: string;
+}[] = [
   { key: "posts", label: "Posts" },
   { key: "mediaAdded", label: "Media added" },
   { key: "mediaViewed", label: "Media viewed" },
   { key: "pagesVisited", label: "Pages visited" },
   { key: "minutesPlayed", label: "Minutes in Microbyte" },
+  { key: "nodesCreated", label: "Nodes created" },
 ];
 
 export default function AccountContent() {
@@ -116,7 +114,7 @@ export default function AccountContent() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={account.pictureUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="flex h-full w-full items-center justify-center">{initials(username)}</span>
+                  <span className="flex h-full w-full items-center justify-center">{usernameInitials(username)}</span>
                 )}
               </button>
               {account.pictureUrl && (

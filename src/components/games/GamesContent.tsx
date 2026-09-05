@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { MouseEvent } from "react";
+import FreeroamButton from "@/components/games/FreeroamButton";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const MICROBYTE_ACCENT = "52, 199, 110";
@@ -54,6 +55,8 @@ export default function GamesContent() {
           </span>
         </div>
       </Link>
+
+      <FreeroamButton />
     </div>
   );
 }

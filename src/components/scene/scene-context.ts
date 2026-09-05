@@ -16,6 +16,9 @@ export type SceneContextValue = {
    *  from a screen point — for other elements (a hovered letter) to borrow
    *  that exact subtle look instead of inventing a separate effect. */
   emitDust: (clientX: number, clientY: number, count?: number) => void;
+  /** Dissolves every page element and hands the camera to WASD/mouse flight
+   *  through the particle field, until Escape brings the page back. */
+  enterFreeroam: () => void;
 };
 
 export const SceneContext = createContext<SceneContextValue | null>(null);

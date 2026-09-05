@@ -2,12 +2,20 @@
 
 import { LayoutGroup } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import HomeButton from "@/components/scene/HomeButton";
 import UtilityButton from "@/components/scene/UtilityButton";
 import { SceneContext, type SceneContextValue } from "@/components/scene/scene-context";
-import { awardNavigationXp } from "@/lib/account";
+import {
+  awardGateXp,
+  awardNavigationXp,
+  getAccountSnapshot,
+  getServerAccountSnapshot,
+  levelProgress,
+  recordNodeCreated,
+  subscribeAccount,
+} from "@/lib/account";
 import {
   colorToUnitRgb,
   getServerSettingsSnapshot,
@@ -77,6 +85,41 @@ function accentForPath(pathname: string) {
 }
 
 const DENSITY_MULTIPLIER: Record<ParticleDensity, number> = { off: 0, low: 0.45, standard: 1, high: 1.85 };
+
+// Freeroam: WASD/mouse-look flight through the same particle field, entered
+// from the Games page's Freeroam button and exited with Escape.
+const FREEROAM_BASE_SPEED = 90; // units/sec
+const FREEROAM_SPRINT_MULT = 2.6;
+const FREEROAM_DASH_SPEED = 480; // units/sec, at full strength
+const FREEROAM_DASH_DURATION = 0.35; // seconds the dash impulse decays over
+const FREEROAM_DASH_COOLDOWN = 0.7; // seconds before another dash can trigger
+const FREEROAM_ACCEL_RATE = 6; // 1/sec - how quickly velocity chases the input direction
+const FREEROAM_LOOK_SENSITIVITY = 0.0022; // radians per pixel of mouse movement
+const FREEROAM_PITCH_LIMIT = Math.PI / 2 - 0.05;
+const FREEROAM_FADE_S = 0.4; // page dissolve/reassemble duration
+const FREEROAM_RETURN_DURATION = 1.1; // camera flight back to the resting view on exit
+const FREEROAM_SPAWN_DISTANCE = 70; // world units in front of the camera a click spawns a node
+const FREEROAM_AIM_THRESHOLD = 50; // screen px - how precisely you must aim to lock onto something
+
+// Enter locks onto whatever's aimed at and rockets the camera toward it
+// instead of teleporting there instantly - speed ramps up fast for a "zoom"
+// feel, and the camera itself turns to face the target as it closes in.
+const FREEROAM_ZOOM_MIN_SPEED = 150; // units/sec at the moment of lock-on
+const FREEROAM_ZOOM_MAX_SPEED = 1500; // units/sec once fully ramped up
+const FREEROAM_ZOOM_RAMP_S = 0.5; // seconds to reach max speed
+const FREEROAM_ZOOM_ARRIVAL = 20; // world units - close enough to call it "arrived"
+const FREEROAM_ZOOM_TIMEOUT = 3; // seconds - safety net if the target can't be reached
+const FREEROAM_ZOOM_FOV_KICK = 16; // extra fov while zooming, same "warp" language as a dive
+
+// One gate at a time: fly through it to earn XP, and it relocates somewhere
+// new in the field, so finding the next one takes actually looking around.
+const GATE_COLOR = "255, 205, 90";
+const GATE_RADIUS = 28;
+const GATE_TUBE = 4;
+const GATE_TRIGGER_RADIUS = 34; // world units - how close the camera must get to count as "through"
+const GATE_REACH = 320; // screen px - how far out its crosshair line reaches
+const GATE_COOLDOWN = 2; // seconds - just a debounce against double-counting one pass
+const GATE_MIN_RESPAWN_DISTANCE = 260; // world units - respawns at least this far from wherever it was scored
 
 // Settings > Node color is one flat color; the particles need a dim ambient
 // tone and a brighter "lit up near the cursor" tone, so the highlight is the
@@ -161,11 +204,26 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
   const emitDust = useCallback((x: number, y: number, count?: number) => {
     emitDustImplRef.current(x, y, count);
   }, []);
+  const enterFreeroamImplRef = useRef<() => void>(() => {});
+  const enterFreeroam = useCallback(() => {
+    enterFreeroamImplRef.current();
+  }, []);
   const getPointer = useCallback(() => mouse.current, []);
   const contextValue = useMemo<SceneContextValue>(
-    () => ({ diveTo, burstAt, getPointer, emitDust }),
-    [diveTo, burstAt, getPointer, emitDust],
+    () => ({ diveTo, burstAt, getPointer, emitDust, enterFreeroam }),
+    [diveTo, burstAt, getPointer, emitDust, enterFreeroam],
   );
+
+  // Drives the freeroam HUD (crosshair + hint text), which lives outside the
+  // page-content wrapper that the imperative dissolve/reassemble fade below
+  // controls, so it needs its own bit of reactive state.
+  const [freeroamActive, setFreeroamActive] = useState(false);
+
+  // The freeroam XP readout reads the same account store every other XP
+  // source (posting, media, Microbyte, ...) writes to, so it's always the
+  // real total behind the player's account level, not a separate counter.
+  const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot, getServerAccountSnapshot);
+  const { level, xp } = levelProgress(account.xp);
 
   // Reactive (unlike the other settings, read imperatively per-frame below)
   // because changing the ambient particle count means rebuilding the
@@ -274,6 +332,39 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     const points = new THREE.Points(geometry, material);
     scene.add(points);
 
+    // The gate: one at a time, only visible/active during freeroam (toggled
+    // in enter/exit below) - a MeshBasicMaterial reads as an unlit glowing
+    // ring, matching the rest of this scene's no-lighting-setup look.
+    type Gate = { mesh: THREE.Mesh; wasInside: boolean; lastActivatedAt: number; phase: number };
+    const gateGeometry = new THREE.TorusGeometry(GATE_RADIUS, GATE_TUBE, 12, 32);
+    const gateMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(...colorToUnitRgb(GATE_COLOR)),
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+    });
+    const gateMesh = new THREE.Mesh(gateGeometry, gateMaterial);
+    gateMesh.visible = false;
+    scene.add(gateMesh);
+    const gate: Gate = { mesh: gateMesh, wasInside: false, lastActivatedAt: -Infinity, phase: 0 };
+
+    // Random, but kept a healthy distance from wherever the camera currently
+    // is - otherwise an unlucky roll could respawn it right on top of you.
+    const randomGatePosition = (avoid: THREE.Vector3) => {
+      const candidate = new THREE.Vector3();
+      let attempts = 0;
+      do {
+        candidate.set(
+          (Math.random() * 2 - 1) * SPREAD_X * 0.75,
+          (Math.random() * 2 - 1) * SPREAD_Y * 0.75,
+          (Math.random() * 2 - 1) * SPREAD_Z * 0.75,
+        );
+        attempts++;
+      } while (candidate.distanceTo(avoid) < GATE_MIN_RESPAWN_DISTANCE && attempts < 8);
+      return candidate;
+    };
+    gate.mesh.position.copy(randomGatePosition(camera.position));
+
     let currentAccentMix = accentForPath(pathnameRef.current).mix;
     // The cursor's own color (its molecule, the lines it draws, its dust
     // trail) - a flat user preference (Settings > Cursor color), independent
@@ -307,10 +398,11 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       (geometry.attributes.aActive as THREE.BufferAttribute).needsUpdate = true;
     };
 
-    const spawnParticle = (clientX: number, clientY: number) => {
-      const local = screenToLocal(clientX, clientY);
-      if (!local) return;
-
+    // Shared by a normal click (screen point raycast to the field's z=0
+    // plane) and a freeroam click (a fixed distance along wherever the
+    // camera is currently looking) - both just need a local-space point to
+    // drop a new node at.
+    const spawnParticleAtLocal = (local: THREE.Vector3) => {
       const idx = BASE_COUNT + nextSpawnSlot;
       nextSpawnSlot = (nextSpawnSlot + 1) % SPAWN_POOL;
 
@@ -328,6 +420,12 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       expiresAt[idx] = Infinity;
 
       markDirty();
+    };
+
+    const spawnParticle = (clientX: number, clientY: number) => {
+      const local = screenToLocal(clientX, clientY);
+      if (!local) return;
+      spawnParticleAtLocal(local);
     };
 
     // A scatter of many particles at once from one screen point — the
@@ -382,6 +480,149 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     let diveAim: { x: number; y: number } | null = null;
     let lastPath = pathnameRef.current;
 
+    // Freeroam: WASD/mouse-look flight with the camera let loose in the same
+    // particle field, entered via the scene context and exited with Escape.
+    type FreeroamState = {
+      active: boolean;
+      yaw: number;
+      pitch: number;
+      velocity: THREE.Vector3;
+      dashDir: THREE.Vector3;
+      dashTimeLeft: number;
+      lastDashAt: number;
+      enteredAt: number;
+    };
+    const freeroam: FreeroamState = {
+      active: false,
+      yaw: 0,
+      pitch: 0,
+      velocity: new THREE.Vector3(),
+      dashDir: new THREE.Vector3(0, 0, -1),
+      dashTimeLeft: 0,
+      lastDashAt: -Infinity,
+      enteredAt: 0,
+    };
+    type FreeroamReturn = { start: number; fromPos: THREE.Vector3; fromYaw: number; fromPitch: number; toZ: number };
+    let freeroamReturn: FreeroamReturn | null = null;
+    const keysDown = new Set<string>();
+
+    // The particle or gate (if any) currently near enough to the crosshair
+    // to lock onto - recomputed every frame in the tick loop below, consumed
+    // when Enter is pressed. Particles carry their buffer index so the zoom
+    // can keep homing on their live (drifting) position rather than a stale
+    // snapshot; the gate is static between respawns so its snapshot is fine.
+    type AimCandidate = { position: THREE.Vector3; screenDist: number; kind: "particle" | "gate"; particleIndex?: number };
+    let aimCandidate: AimCandidate | null = null;
+    const aimedParticleWorld = new THREE.Vector3();
+
+    // The rapid lock-on flight Enter kicks off - active until it arrives (or
+    // times out), during which normal WASD/mouse-look input is ignored.
+    type FreeroamZoom = {
+      kind: "particle" | "gate";
+      particleIndex?: number;
+      fallbackPosition: THREE.Vector3;
+      start: number;
+    };
+    let freeroamZoom: FreeroamZoom | null = null;
+    const zoomTargetTmp = new THREE.Vector3();
+
+    const freeroamForward = () => {
+      const euler = new THREE.Euler(freeroam.pitch, freeroam.yaw, 0, "YXZ");
+      return new THREE.Vector3(0, 0, -1).applyEuler(euler);
+    };
+
+    const enterFreeroam = () => {
+      if (freeroam.active || dive) return;
+      freeroam.active = true;
+      freeroam.yaw = 0;
+      freeroam.pitch = 0;
+      freeroam.velocity.set(0, 0, 0);
+      freeroam.dashTimeLeft = 0;
+      freeroam.enteredAt = timer.getElapsed();
+      freeroamReturn = null;
+      aimCandidate = null;
+      freeroamZoom = null;
+      keysDown.clear();
+      // Clears any highlight left over from the cursor at the moment freeroam
+      // took over, since the normal per-frame highlight pass is skipped
+      // while active and would otherwise leave a few particles stuck bright.
+      highlights.fill(0);
+      (geometry.attributes.aHighlight as THREE.BufferAttribute).needsUpdate = true;
+      gate.mesh.visible = true;
+      setFreeroamActive(true);
+      try {
+        const lock = renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+        lock?.catch(() => {});
+      } catch {
+        // Pointer lock isn't available here - flight still works, just without captured mouse-look.
+      }
+    };
+
+    const exitFreeroam = () => {
+      if (!freeroam.active) return;
+      freeroam.active = false;
+      // If a zoom was mid-flight, freeroam.yaw/pitch are stale (the zoom
+      // drives the camera via lookAt, not those fields) - resync from the
+      // camera's actual current facing so the return flight starts from
+      // where you're really looking, not where you were before locking on.
+      if (freeroamZoom) {
+        const finalEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+        freeroam.yaw = finalEuler.y;
+        freeroam.pitch = finalEuler.x;
+      }
+      // The zoom can leave fov kicked up past 60 - nothing else along the
+      // return flight resets it.
+      camera.fov = 60;
+      camera.updateProjectionMatrix();
+      freeroamReturn = {
+        start: timer.getElapsed(),
+        fromPos: camera.position.clone(),
+        fromYaw: freeroam.yaw,
+        fromPitch: freeroam.pitch,
+        toZ: depthForPath(pathnameRef.current),
+      };
+      aimCandidate = null;
+      freeroamZoom = null;
+      keysDown.clear();
+      gate.mesh.visible = false;
+      setFreeroamActive(false);
+      if (document.pointerLockElement) document.exitPointerLock();
+    };
+    enterFreeroamImplRef.current = enterFreeroam;
+
+    // Enter locks onto whatever's under the crosshair and starts the rapid
+    // zoom-in flight (handled per-frame in the tick loop); a plain click
+    // (see onPointerDown below) always drops a new node instead.
+    const lockOnToAimCandidate = () => {
+      if (!aimCandidate || freeroamZoom) return;
+      freeroamZoom = {
+        kind: aimCandidate.kind,
+        particleIndex: aimCandidate.particleIndex,
+        fallbackPosition: aimCandidate.position.clone(),
+        start: timer.getElapsed(),
+      };
+    };
+
+    // Hands control back at wherever the zoom's own lookAt left the camera
+    // facing (baked into freeroam.yaw/pitch so normal mouse-look picks up
+    // from there instead of snapping) - shared by a normal arrival/timeout
+    // and by the gate relocating out from under an in-flight zoom.
+    const endFreeroamZoom = () => {
+      const finalEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+      freeroam.yaw = finalEuler.y;
+      freeroam.pitch = finalEuler.x;
+      freeroam.velocity.set(0, 0, 0);
+      camera.fov = 60;
+      camera.updateProjectionMatrix();
+      freeroamZoom = null;
+    };
+
+    const spawnNodeAtCrosshair = () => {
+      const worldPos = camera.position.clone().addScaledVector(freeroamForward(), FREEROAM_SPAWN_DISTANCE);
+      spawnParticleAtLocal(points.worldToLocal(worldPos));
+      recordNodeCreated();
+    };
+
     // Cursor wake: tiny motes that drift, slowly rise, and fade — like dust
     // disturbed by something moving through it, not a smoke trail. Faster
     // movement stirs up more of them.
@@ -435,7 +676,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     emitDustImplRef.current = (x: number, y: number, count = 2) => emitDust(x, y, count);
 
     diveToImplRef.current = (href: string, originEl?: HTMLElement | null) => {
-      if (dive) return;
+      if (dive || freeroam.active) return;
       let ndcX = targetCam.x;
       let ndcY = targetCam.y;
       let clientX = width / 2;
@@ -475,16 +716,61 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         targetCam.x = (e.clientX / width - 0.5) * 2;
         targetCam.y = (e.clientY / height - 0.5) * 2;
       }
+      if (freeroam.active) {
+        freeroam.yaw -= e.movementX * FREEROAM_LOOK_SENSITIVITY;
+        freeroam.pitch -= e.movementY * FREEROAM_LOOK_SENSITIVITY;
+        freeroam.pitch = Math.max(-FREEROAM_PITCH_LIMIT, Math.min(FREEROAM_PITCH_LIMIT, freeroam.pitch));
+      }
     };
     const onPointerLeave = () => {
       mouse.current = null;
     };
     const onPointerDown = (e: PointerEvent) => {
+      if (freeroam.active) {
+        spawnNodeAtCrosshair();
+        return;
+      }
       spawnParticle(e.clientX, e.clientY);
+      recordNodeCreated();
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerleave", onPointerLeave);
     window.addEventListener("pointerdown", onPointerDown);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && freeroam.active) {
+        e.preventDefault();
+        exitFreeroam();
+        return;
+      }
+      if (!freeroam.active) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!e.repeat && timer.getElapsed() - freeroam.lastDashAt > FREEROAM_DASH_COOLDOWN) {
+          freeroam.lastDashAt = timer.getElapsed();
+          freeroam.dashTimeLeft = FREEROAM_DASH_DURATION;
+          freeroam.dashDir.copy(freeroamForward());
+        }
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!e.repeat) lockOnToAimCandidate();
+        return;
+      }
+      keysDown.add(e.key.toLowerCase());
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      keysDown.delete(e.key.toLowerCase());
+    };
+    const onPointerLockChange = () => {
+      // Catches the lock being released some other way (the browser's own
+      // Escape handling, alt-tab, ...) so freeroam still exits cleanly.
+      if (!document.pointerLockElement && freeroam.active) exitFreeroam();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    document.addEventListener("pointerlockchange", onPointerLockChange);
 
     const resize = () => {
       width = window.innerWidth;
@@ -635,7 +921,90 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       // camera motion), then reassembles once the new page has mounted.
       let contentOpacity = 1;
 
-      if (dive) {
+      if (freeroamReturn) {
+        const progress = Math.min((t - freeroamReturn.start) / FREEROAM_RETURN_DURATION, 1);
+        const eased = easeInOutCubic(progress);
+        camera.position.lerpVectors(freeroamReturn.fromPos, new THREE.Vector3(0, 0, freeroamReturn.toZ), eased);
+        camera.rotation.order = "YXZ";
+        camera.rotation.set(freeroamReturn.fromPitch * (1 - eased), freeroamReturn.fromYaw * (1 - eased), 0);
+        contentOpacity = Math.min((t - freeroamReturn.start) / FREEROAM_FADE_S, 1);
+        if (progress >= 1) freeroamReturn = null;
+      } else if (freeroam.active) {
+        if (freeroamZoom) {
+          // Homes on the particle's live position (it keeps drifting), the
+          // gate's current spot, or a frozen fallback if the particle it
+          // locked onto happened to expire mid-flight.
+          let zoomTarget: THREE.Vector3;
+          if (freeroamZoom.kind === "particle" && freeroamZoom.particleIndex !== undefined && actives[freeroamZoom.particleIndex] >= 0.5) {
+            const idx = freeroamZoom.particleIndex;
+            zoomTarget = zoomTargetTmp.set(positions[idx * 3], positions[idx * 3 + 1], positions[idx * 3 + 2]).applyMatrix4(points.matrixWorld);
+          } else if (freeroamZoom.kind === "gate") {
+            zoomTarget = gate.mesh.position;
+          } else {
+            zoomTarget = freeroamZoom.fallbackPosition;
+          }
+
+          const toTarget = zoomTarget.clone().sub(camera.position);
+          const dist = toTarget.length();
+          const elapsed = t - freeroamZoom.start;
+
+          if (dist < FREEROAM_ZOOM_ARRIVAL || elapsed > FREEROAM_ZOOM_TIMEOUT) {
+            endFreeroamZoom();
+          } else {
+            const rampT = Math.min(elapsed / FREEROAM_ZOOM_RAMP_S, 1);
+            const speed = FREEROAM_ZOOM_MIN_SPEED + (FREEROAM_ZOOM_MAX_SPEED - FREEROAM_ZOOM_MIN_SPEED) * rampT;
+            const step = Math.min(speed * dt, dist);
+            camera.position.addScaledVector(toTarget.normalize(), step);
+            camera.lookAt(zoomTarget);
+            camera.fov = 60 + Math.min(FREEROAM_ZOOM_FOV_KICK, elapsed * 60);
+            camera.updateProjectionMatrix();
+          }
+        } else {
+          camera.rotation.order = "YXZ";
+          camera.rotation.set(freeroam.pitch, freeroam.yaw, 0);
+
+          const forward = freeroamForward();
+          const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, freeroam.yaw, 0, "YXZ"));
+
+          let moveX = 0;
+          let moveZ = 0;
+          if (keysDown.has("w")) moveZ += 1;
+          if (keysDown.has("s")) moveZ -= 1;
+          if (keysDown.has("d")) moveX += 1;
+          if (keysDown.has("a")) moveX -= 1;
+          const inputLen = Math.hypot(moveX, moveZ);
+          if (inputLen > 0) {
+            moveX /= inputLen;
+            moveZ /= inputLen;
+          }
+
+          const sprinting = keysDown.has("shift");
+          const targetSpeed = FREEROAM_BASE_SPEED * (sprinting ? FREEROAM_SPRINT_MULT : 1);
+          const targetVelocity = new THREE.Vector3()
+            .addScaledVector(forward, moveZ * targetSpeed)
+            .addScaledVector(right, moveX * targetSpeed);
+          freeroam.velocity.lerp(targetVelocity, 1 - Math.exp(-FREEROAM_ACCEL_RATE * dt));
+          camera.position.addScaledVector(freeroam.velocity, dt);
+
+          if (freeroam.dashTimeLeft > 0) {
+            const dashStrength = freeroam.dashTimeLeft / FREEROAM_DASH_DURATION;
+            camera.position.addScaledVector(freeroam.dashDir, FREEROAM_DASH_SPEED * dashStrength * dt);
+            freeroam.dashTimeLeft = Math.max(0, freeroam.dashTimeLeft - dt);
+          }
+
+          // A loose leash around the particle field, so flying "forward
+          // forever" eventually turns you back toward the life of the scene
+          // instead of off into empty space.
+          const boundX = SPREAD_X * 1.3;
+          const boundY = SPREAD_Y * 1.3;
+          const boundZ = SPREAD_Z * 1.3;
+          camera.position.x = Math.max(-boundX, Math.min(boundX, camera.position.x));
+          camera.position.y = Math.max(-boundY, Math.min(boundY, camera.position.y));
+          camera.position.z = Math.max(-boundZ, Math.min(boundZ, camera.position.z));
+        }
+
+        contentOpacity = Math.max(0, 1 - (t - freeroam.enteredAt) / FREEROAM_FADE_S);
+      } else if (dive) {
         const progress = Math.min((t - dive.startTime) / dive.duration, 1);
         const eased = easeInOutCubic(progress);
         camera.position.z = dive.fromZ + (dive.toZ - dive.fromZ) * eased;
@@ -677,7 +1046,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         camera.position.y += (-targetCam.y * 45 - camera.position.y) * 0.04;
       }
 
-      camera.lookAt(0, 0, 0);
+      if (!freeroam.active && !freeroamReturn) camera.lookAt(0, 0, 0);
       renderer.render(scene, camera);
 
       if (contentRef.current) {
@@ -689,10 +1058,15 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       }
 
       lineCtx.clearRect(0, 0, width, height);
-      const m = mouse.current;
+      // The crosshair stands in for the cursor while freeroaming, so the
+      // same reach/line-drawing logic below lights up nearby particles (and,
+      // further down, gates) around it instead of a 2D mouse position.
+      const crosshair = { x: width / 2, y: height / 2 };
+      const m = freeroam.active ? crosshair : freeroamReturn ? null : mouse.current;
+      aimCandidate = null;
 
       if (m) {
-        if (lastTrailMouse && trailEffect) {
+        if (lastTrailMouse && trailEffect && !freeroam.active) {
           const dx = m.x - lastTrailMouse.x;
           const dy = m.y - lastTrailMouse.y;
           const dist = Math.hypot(dx, dy);
@@ -734,7 +1108,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           };
         });
       }
-      const targets = cachedTargets;
+      // Empty (rather than skipping the refresh above) while freeroam is
+      // active/returning, so every line-to-a-target loop below just no-ops
+      // without each needing its own guard.
+      const targets = freeroam.active || freeroamReturn ? [] : cachedTargets;
 
       // The cursor draws a line to nearby particles; it draws the same kind
       // of line straight to a nearby target (a hero letter, a nav orb) too,
@@ -784,6 +1161,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
 
         projected.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
         projected.applyMatrix4(points.matrixWorld);
+        if (freeroam.active) aimedParticleWorld.copy(projected);
         projected.project(camera);
         if (projected.z > 1) continue;
 
@@ -806,6 +1184,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
             lineCtx.lineWidth = 1;
             lineCtx.stroke();
           }
+          if (freeroam.active && dist < FREEROAM_AIM_THRESHOLD && (!aimCandidate || dist < aimCandidate.screenDist)) {
+            aimCandidate = { position: aimedParticleWorld.clone(), screenDist: dist, kind: "particle", particleIndex: i };
+          }
         }
 
         targets.forEach((tg) => {
@@ -827,6 +1208,51 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         highlights[i] = highlight;
       }
       (geometry.attributes.aHighlight as THREE.BufferAttribute).needsUpdate = true;
+
+      if (freeroam.active) {
+        const gateMaterial = gate.mesh.material as THREE.MeshBasicMaterial;
+        gate.mesh.rotation.z += dt * 0.25;
+        const cooldownT = Math.min((t - gate.lastActivatedAt) / GATE_COOLDOWN, 1);
+        gateMaterial.opacity = 0.3 + 0.6 * cooldownT;
+        gate.mesh.scale.setScalar(1 + 0.12 * Math.sin(t * 2 + gate.phase));
+
+        // Fly-through trigger: an edge-triggered 3D proximity check, not
+        // tied to the crosshair, so it counts a pass-through from any
+        // approach angle (including arriving via a locked-on zoom).
+        const inside = camera.position.distanceTo(gate.mesh.position) < GATE_TRIGGER_RADIUS;
+        if (inside && !gate.wasInside && cooldownT >= 1) {
+          gate.lastActivatedAt = t;
+          awardGateXp();
+          // One gate at a time - scoring it sends it off somewhere new, so
+          // finding the next one means actually looking around again.
+          gate.mesh.position.copy(randomGatePosition(camera.position));
+          if (freeroamZoom?.kind === "gate") endFreeroamZoom();
+        }
+        gate.wasInside = inside;
+
+        // Crosshair line + lock-on aim, same reach-based treatment as a
+        // particle target above.
+        const gp = gate.mesh.position.clone().project(camera);
+        if (gp.z <= 1) {
+          const sx = (gp.x * 0.5 + 0.5) * width;
+          const sy = (1 - (gp.y * 0.5 + 0.5)) * height;
+          const dx = sx - crosshair.x;
+          const dy = sy - crosshair.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < GATE_REACH) {
+            const proximity = 1 - dist / GATE_REACH;
+            lineCtx.beginPath();
+            lineCtx.moveTo(crosshair.x, crosshair.y);
+            lineCtx.lineTo(sx, sy);
+            lineCtx.strokeStyle = `rgba(${GATE_COLOR}, ${proximity * 0.6})`;
+            lineCtx.lineWidth = 1.5;
+            lineCtx.stroke();
+          }
+          if (dist < FREEROAM_AIM_THRESHOLD && (!aimCandidate || dist < aimCandidate.screenDist)) {
+            aimCandidate = { position: gate.mesh.position.clone(), screenDist: dist, kind: "gate" };
+          }
+        }
+      }
 
       for (let i = trail.length - 1; i >= 0; i--) {
         const dot = trail[i];
@@ -858,7 +1284,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         lineCtx.fill();
       }
 
-      if (m) drawCursorMolecule(m.x, m.y, t);
+      if (m && !freeroam.active) drawCursorMolecule(m.x, m.y, t);
 
       rafId = requestAnimationFrame(tick);
     };
@@ -870,9 +1296,15 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("pointerlockchange", onPointerLockChange);
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
       renderer.dispose();
       geometry.dispose();
       material.dispose();
+      gateGeometry.dispose();
+      (gate.mesh.material as THREE.Material).dispose();
       mount.removeChild(renderer.domElement);
     };
   }, [router, particleDensity]);
@@ -885,12 +1317,27 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           letters off between the home hero and this button by layoutId,
           rather than one fading out while the other fades in. */}
       <LayoutGroup>
-        {pathname !== "/" && <HomeButton />}
-        <UtilityButton />
+        {/* HomeButton/UtilityButton live inside this same fading wrapper (not
+            as separate siblings) so freeroam dissolving `children` dissolves
+            them too, instead of leaving nav chrome floating over the flight
+            view. */}
         <div ref={contentRef} className="relative z-10" style={{ opacity: 1, transformStyle: "preserve-3d" }}>
+          {pathname !== "/" && <HomeButton />}
+          <UtilityButton />
           {children}
         </div>
       </LayoutGroup>
+      {freeroamActive && (
+        <div className="pointer-events-none fixed inset-0 z-30">
+          <div className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/50" />
+          <p className="absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/60">
+            Lv {level} · {xp.toLocaleString()} XP
+          </p>
+          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/40">
+            WASD to move · Shift to sprint · Space to dash · Enter to lock on · Esc to return
+          </p>
+        </div>
+      )}
     </SceneContext.Provider>
   );
 }

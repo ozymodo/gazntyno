@@ -4,6 +4,7 @@ export type AccountStats = {
   mediaViewed: number;
   pagesVisited: number;
   minutesPlayed: number;
+  nodesCreated: number;
 };
 
 export type Account = {
@@ -14,6 +15,13 @@ export type Account = {
   /** Object URL for the stored profile picture blob, or null if none is set. Not persisted directly - derived from IndexedDB at load time. */
   pictureUrl: string | null;
 };
+
+export function usernameInitials(username: string): string {
+  const trimmed = username.trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/);
+  return parts.length === 1 ? trimmed.slice(0, 2).toUpperCase() : (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 export type LevelProgress = {
   level: number;
@@ -29,6 +37,7 @@ const DEFAULT_STATS: AccountStats = {
   mediaViewed: 0,
   pagesVisited: 0,
   minutesPlayed: 0,
+  nodesCreated: 0,
 };
 
 const DEFAULT_ACCOUNT: Account = {
@@ -69,6 +78,7 @@ function sanitize(raw: unknown): PersistedFields {
       mediaViewed: typeof stats.mediaViewed === "number" ? stats.mediaViewed : DEFAULT_STATS.mediaViewed,
       pagesVisited: typeof stats.pagesVisited === "number" ? stats.pagesVisited : DEFAULT_STATS.pagesVisited,
       minutesPlayed: typeof stats.minutesPlayed === "number" ? stats.minutesPlayed : DEFAULT_STATS.minutesPlayed,
+      nodesCreated: typeof stats.nodesCreated === "number" ? stats.nodesCreated : DEFAULT_STATS.nodesCreated,
     },
   };
 }
@@ -180,6 +190,40 @@ export function awardMediaViewXp(id: string) {
 
 export function awardMicrobyteMinute() {
   awardXp(5, "microbyte-minute", 50_000, (s) => ({ ...s, minutesPlayed: s.minutesPlayed + 1 }));
+}
+
+// Clicking to create a node is cheap enough to spam, so unlike the other
+// stats above, the "total nodes created" count always goes up - the
+// cooldown only gates whether *this particular click* also earns XP.
+const NODE_CREATION_XP = 3;
+const NODE_CREATION_XP_COOLDOWN_MS = 2_000;
+
+export function recordNodeCreated() {
+  ensureHydrated();
+  const now = Date.now();
+  const last = cooldowns.get("node-created");
+  const grantXp = last === undefined || now - last >= NODE_CREATION_XP_COOLDOWN_MS;
+  if (grantXp) cooldowns.set("node-created", now);
+  cache = {
+    ...cache,
+    xp: cache.xp + (grantXp ? NODE_CREATION_XP : 0),
+    stats: { ...cache.stats, nodesCreated: cache.stats.nodesCreated + 1 },
+  };
+  persist();
+  emit();
+}
+
+// Gates track their own per-gate cooldown/edge-trigger in SceneProvider (it
+// already needs that state for the cooldown-dimming visual), so by the time
+// this is called the caller has already decided the pass-through counts -
+// no extra rate-limiting needed here.
+const GATE_XP = 40;
+
+export function awardGateXp() {
+  ensureHydrated();
+  cache = { ...cache, xp: cache.xp + GATE_XP };
+  persist();
+  emit();
 }
 
 // The profile picture is the one binary blob this module deals with, so it
