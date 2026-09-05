@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { MouseEvent } from "react";
+import AnimatedTitle from "@/components/common/AnimatedTitle";
 import DiscordLink from "@/components/games/DiscordLink";
 import FreeroamButton from "@/components/games/FreeroamButton";
 import { useSceneTransition } from "@/components/scene/scene-context";
@@ -19,7 +20,12 @@ export default function GamesContent() {
   return (
     <div className="flex h-dvh touch-none flex-col items-center justify-center gap-10 px-6 py-24">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">GAMES</h1>
+        <AnimatedTitle
+          text="GAMES"
+          intensity={0.4}
+          accent={MICROBYTE_ACCENT}
+          className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
+        />
         <p className="text-sm text-white/40">Playable worlds, built from scratch.</p>
       </div>
 
@@ -43,7 +49,7 @@ export default function GamesContent() {
         />
         <div className="relative flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold tracking-wide text-white">Microbyte</h2>
+            <h2 className="text-2xl font-semibold tracking-wide text-white">microbyte</h2>
             <span
               className="rounded-full border px-3 py-1 text-xs uppercase tracking-widest"
               style={{
@@ -57,7 +63,7 @@ export default function GamesContent() {
           </div>
           <p className="text-sm leading-relaxed text-white/60">
            play as a tiny organism in a microscopic world. survive, hunt, and multiply in a dynamic ecosystem teeming with life. 
-           microbyte is a unique blend of rougelite, simulation, and stategy. 
+           microbyte is a unique genre blend of rougelite, simulation, and stategy. 
           </p>
           <span className="text-sm font-medium text-emerald-300 transition-colors group-hover:text-emerald-200">
             Play in browser →

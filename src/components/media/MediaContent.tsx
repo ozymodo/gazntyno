@@ -22,6 +22,7 @@ import {
   subscribeMedia,
   updateCaption,
 } from "@/lib/media";
+import AnimatedTitle from "@/components/common/AnimatedTitle";
 import MediaEditor from "@/components/media/MediaEditor";
 import MediaOrb from "@/components/media/MediaOrb";
 import MediaViewer from "@/components/media/MediaViewer";
@@ -98,7 +99,12 @@ export default function MediaContent() {
     <LayoutGroup>
       <div className="flex h-dvh touch-none flex-col px-6 py-16">
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">MEDIA</h1>
+          <AnimatedTitle
+            text="MEDIA"
+            intensity={0.4}
+            accent={ACCENT}
+            className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
+          />
           <p className="text-sm text-white/40">Snapshots drift here — click one to open it.</p>
         </div>
 

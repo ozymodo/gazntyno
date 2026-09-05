@@ -13,6 +13,7 @@ import {
   usernameInitials,
   WORDMARK_MAX_LENGTH,
 } from "@/lib/account";
+import AnimatedTitle from "@/components/common/AnimatedTitle";
 import { Row, Section } from "@/components/common/Panel";
 import AuthPanel from "@/components/account/AuthPanel";
 import { getAuthSnapshot, getServerAuthSnapshot, subscribeAuth } from "@/lib/auth";
@@ -104,9 +105,14 @@ export default function AccountContent() {
       />
 
       <div className="relative flex flex-col items-center gap-2">
-        <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">ACCOUNT</h1>
+        <AnimatedTitle
+          text="ACCOUNT"
+          intensity={0.4}
+          accent={ACCENT}
+          className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
+        />
         <p className="max-w-md text-sm text-white/40">
-          Your profile and progress on Technature. {auth.uid ? "Synced to your account." : "Saved on this device."}
+          Your profile and progress on gazntyno. {auth.uid ? "Synced to your account." : "Saved on this device."}
         </p>
       </div>
 

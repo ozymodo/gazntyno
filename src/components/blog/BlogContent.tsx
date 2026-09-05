@@ -20,9 +20,11 @@ import {
   saveGlobalPost,
   subscribeGlobalPosts,
 } from "@/lib/globalBlog";
+import AnimatedTitle from "@/components/common/AnimatedTitle";
 import PostEditor from "@/components/blog/PostEditor";
 import PostOrb from "@/components/blog/PostOrb";
 import PostViewer from "@/components/blog/PostViewer";
+import XLink from "@/components/blog/XLink";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const ACCENT = "56, 145, 255";
@@ -97,7 +99,12 @@ export default function BlogContent() {
     <LayoutGroup>
       <div className="flex h-dvh touch-none flex-col px-6 py-16">
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">BLOG</h1>
+          <AnimatedTitle
+            text="BLOG"
+            intensity={0.4}
+            accent={ACCENT}
+            className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
+          />
           <p className="text-sm text-white/40">Posts drift here — click one to open it.</p>
         </div>
 
@@ -129,6 +136,8 @@ export default function BlogContent() {
           })}
         </div>
       </div>
+
+      <XLink />
 
       {(!overlay || overlay.type !== "new") && (
         <motion.button
