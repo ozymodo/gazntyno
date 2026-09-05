@@ -10,6 +10,39 @@ const PLAYTIME_TICK_MS = 60_000;
 export default function MicrobytePlayer() {
   const [loaded, setLoaded] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  // iOS Safari has no Fullscreen API for anything but a bare <video> - no
+  // requestFullscreen on the iframe, no vendor-prefixed escape hatch. This
+  // is the fallback for that case (and anywhere else the real API fails):
+  // a fixed, full-viewport CSS overlay with its own exit button, since
+  // there's neither native chrome nor an Escape key to back out with.
+  const [fakeFullscreen, setFakeFullscreen] = useState(false);
+  const isFullscreen = nativeFullscreen || fakeFullscreen;
+
+  useEffect(() => {
+    const onFullscreenChange = () => setNativeFullscreen(document.fullscreenElement === containerRef.current);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (isFullscreen) {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      setFakeFullscreen(false);
+      return;
+    }
+    const el = containerRef.current;
+    if (el && document.fullscreenEnabled) {
+      try {
+        await el.requestFullscreen();
+        return;
+      } catch {
+        // Falls through to the CSS overlay below.
+      }
+    }
+    setFakeFullscreen(true);
+  };
 
   // Counts "on this page with the game loaded" as played time - there's no
   // reach into the iframe's own state across the boundary, but XP ticks are
@@ -60,7 +93,14 @@ export default function MicrobytePlayer() {
         </p>
       </div>
 
-      <div className="relative flex aspect-video w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl border border-emerald-400/20 bg-black">
+      <div
+        ref={containerRef}
+        className={`flex items-center justify-center overflow-hidden bg-black ${
+          isFullscreen
+            ? "fixed inset-0 z-50"
+            : "relative aspect-video w-full max-w-4xl rounded-2xl border border-emerald-400/20"
+        }`}
+      >
         {!loaded && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-400/20 border-t-emerald-400" />
@@ -72,14 +112,16 @@ export default function MicrobytePlayer() {
           title="Microbyte"
           className="h-full w-full border-0"
           allow="autoplay; fullscreen; gamepad"
+          allowFullScreen
           onLoad={() => setLoaded(true)}
         />
         <button
           type="button"
-          onClick={() => frameRef.current?.requestFullscreen()}
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           className="absolute right-3 top-3 z-10 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-xs text-white/70 backdrop-blur-sm transition-colors hover:border-emerald-400/30 hover:text-white"
         >
-          Fullscreen
+          {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
         </button>
       </div>
     </div>
