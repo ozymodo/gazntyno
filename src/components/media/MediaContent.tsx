@@ -15,6 +15,7 @@ import {
 import MediaEditor from "@/components/media/MediaEditor";
 import MediaOrb from "@/components/media/MediaOrb";
 import MediaViewer from "@/components/media/MediaViewer";
+import SocialLinks from "@/components/media/SocialLinks";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const ACCENT = "214, 168, 68";
@@ -84,6 +85,8 @@ export default function MediaContent() {
           })}
         </div>
       </div>
+
+      <SocialLinks />
 
       {(!overlay || overlay.type !== "new") && (
         <motion.button

@@ -21,6 +21,23 @@ body {
   font-family: var(--font-active, var(--font-sans)), Arial, Helvetica, sans-serif;
 }
 
+/* Settings > (landing page title) Size: the wordmark's font-size needs to
+   stay responsive (a plain fixed value set from JS would fight the sm:
+   breakpoint below), so the multiplier lives in a CSS variable instead -
+   HomeContent sets --wordmark-scale, this just multiplies the two
+   breakpoints' base sizes (text-5xl/text-7xl) by it. */
+:root {
+  --wordmark-scale: 1;
+}
+.wordmark-text {
+  font-size: calc(3rem * var(--wordmark-scale));
+}
+@media (min-width: 640px) {
+  .wordmark-text {
+    font-size: calc(4.5rem * var(--wordmark-scale));
+  }
+}
+
 /* Settings > Reduced motion: mutes the ambient CSS-driven animations (the
    nav orbs' breathing glow and drift). The 3D scene's own dive/wander
    animations read the same preference directly in SceneProvider/HomeButton/

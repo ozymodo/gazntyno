@@ -17,7 +17,16 @@ export type Settings = {
   trailEffect: boolean;
   particleDensity: ParticleDensity;
   reducedMotion: boolean;
+  /** Site-wide body font. */
   font: FontChoice;
+  /** The following four control only the "TECHNATURE" wordmark on the landing page. */
+  wordmarkFont: FontChoice;
+  /** "r, g, b" - the letters shade from white down into this color, replacing the fixed white-to-emerald gradient. */
+  wordmarkColor: string;
+  /** Scale multiplier on the wordmark's (responsive) base font size - 1 is the default size. */
+  wordmarkSize: number;
+  /** CSS font-weight, 100-900. */
+  wordmarkWeight: number;
 };
 
 // Shared by all three color settings below - each just needs a swatch label
@@ -38,6 +47,24 @@ export const DEFAULT_SETTINGS: Settings = {
   particleDensity: "standard",
   reducedMotion: false,
   font: "sans",
+  wordmarkFont: "sans",
+  // Matches Tailwind's emerald-200 at 40% - the gradient's original fixed
+  // end color, kept as the default so nothing looks different out of the box.
+  wordmarkColor: "167, 243, 208",
+  wordmarkSize: 1,
+  wordmarkWeight: 600,
+};
+
+export const WORDMARK_SIZE_MIN = 0.6;
+export const WORDMARK_SIZE_MAX = 1.6;
+export const WORDMARK_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+
+// Shared by ApplySettings (site-wide body font) and HomeContent (wordmark
+// font) - both just need the CSS var for a given FontChoice.
+export const FONT_FAMILY_VAR: Record<FontChoice, string> = {
+  sans: "var(--font-geist-sans)",
+  serif: "var(--font-source-serif)",
+  mono: "var(--font-geist-mono)",
 };
 
 const RGB_PATTERN = /^\d{1,3}, ?\d{1,3}, ?\d{1,3}$/;
@@ -74,6 +101,15 @@ function sanitize(raw: unknown): Settings {
     particleDensity: isParticleDensity(r.particleDensity) ? r.particleDensity : DEFAULT_SETTINGS.particleDensity,
     reducedMotion: typeof r.reducedMotion === "boolean" ? r.reducedMotion : DEFAULT_SETTINGS.reducedMotion,
     font: isFontChoice(r.font) ? r.font : DEFAULT_SETTINGS.font,
+    wordmarkFont: isFontChoice(r.wordmarkFont) ? r.wordmarkFont : DEFAULT_SETTINGS.wordmarkFont,
+    wordmarkColor: sanitizeColor(r.wordmarkColor, DEFAULT_SETTINGS.wordmarkColor),
+    wordmarkSize:
+      typeof r.wordmarkSize === "number" && r.wordmarkSize >= WORDMARK_SIZE_MIN && r.wordmarkSize <= WORDMARK_SIZE_MAX
+        ? r.wordmarkSize
+        : DEFAULT_SETTINGS.wordmarkSize,
+    wordmarkWeight: WORDMARK_WEIGHTS.includes(r.wordmarkWeight as number)
+      ? (r.wordmarkWeight as number)
+      : DEFAULT_SETTINGS.wordmarkWeight,
   };
 }
 

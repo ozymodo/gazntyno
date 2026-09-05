@@ -11,6 +11,9 @@ import {
   resetSettings,
   subscribeSettings,
   updateSettings,
+  WORDMARK_SIZE_MAX,
+  WORDMARK_SIZE_MIN,
+  WORDMARK_WEIGHTS,
   type FontChoice,
   type ParticleDensity,
 } from "@/lib/settings";
@@ -27,6 +30,18 @@ const FONT_OPTIONS: { value: FontChoice; label: string; className: string }[] = 
   { value: "serif", label: "Serif", className: "font-serif" },
   { value: "mono", label: "Mono", className: "font-mono" },
 ];
+
+const WEIGHT_LABELS: Record<number, string> = {
+  100: "Thin",
+  200: "Extra light",
+  300: "Light",
+  400: "Regular",
+  500: "Medium",
+  600: "Semibold",
+  700: "Bold",
+  800: "Extra bold",
+  900: "Black",
+};
 
 function Toggle({
   checked,
@@ -54,6 +69,40 @@ function Toggle({
         style={{ transform: checked ? "translateX(22px)" : "translateX(2px)" }}
       />
     </button>
+  );
+}
+
+function Slider({
+  value,
+  min,
+  max,
+  step,
+  accent,
+  onChange,
+  formatValue,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  accent: string;
+  onChange: (v: number) => void;
+  formatValue: (v: number) => string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ accentColor: `rgb(${accent})` }}
+        className="h-1.5 w-28 cursor-pointer sm:w-36"
+      />
+      <span className="w-16 text-right text-xs tabular-nums text-white/50">{formatValue(value)}</span>
+    </div>
   );
 }
 
@@ -186,6 +235,51 @@ export default function SettingsContent() {
                 </button>
               ))}
             </div>
+          </Row>
+        </Section>
+
+        <Section title="Landing page title">
+          <Row title="Font" description="Just the TECHNATURE letters, not the whole site.">
+            <div className="flex gap-1.5">
+              {FONT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => updateSettings({ wordmarkFont: opt.value })}
+                  title={opt.label}
+                  aria-label={opt.label}
+                  className={`flex h-9 w-12 items-center justify-center rounded-full border text-sm transition-colors ${opt.className}`}
+                  style={pillStyle(settings.wordmarkFont === opt.value, accent)}
+                >
+                  Aa
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row title="Color" description="Shades from white down into this color.">
+            <ColorPicker value={settings.wordmarkColor} onChange={(color) => updateSettings({ wordmarkColor: color })} />
+          </Row>
+          <Row title="Size">
+            <Slider
+              value={settings.wordmarkSize}
+              min={WORDMARK_SIZE_MIN}
+              max={WORDMARK_SIZE_MAX}
+              step={0.05}
+              accent={accent}
+              onChange={(v) => updateSettings({ wordmarkSize: v })}
+              formatValue={(v) => `${Math.round(v * 100)}%`}
+            />
+          </Row>
+          <Row title="Thickness">
+            <Slider
+              value={settings.wordmarkWeight}
+              min={WORDMARK_WEIGHTS[0]}
+              max={WORDMARK_WEIGHTS[WORDMARK_WEIGHTS.length - 1]}
+              step={100}
+              accent={accent}
+              onChange={(v) => updateSettings({ wordmarkWeight: v })}
+              formatValue={(v) => WEIGHT_LABELS[v] ?? String(v)}
+            />
           </Row>
         </Section>
 

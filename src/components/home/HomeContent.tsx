@@ -6,7 +6,7 @@ import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
 import AccountBadge from "@/components/home/AccountBadge";
 import { useSceneTransition } from "@/components/scene/scene-context";
-import { getSettingsSnapshot } from "@/lib/settings";
+import { FONT_FAMILY_VAR, getSettingsSnapshot } from "@/lib/settings";
 
 type NavOrb = {
   label: string;
@@ -82,7 +82,8 @@ export default function HomeContent() {
         if (baseCenters.length === 0) measure();
         const t = now / 1000;
         const pointer = getPointer();
-        const { accent, reducedMotion } = getSettingsSnapshot();
+        const { accent, reducedMotion, wordmarkFont, wordmarkColor, wordmarkWeight } = getSettingsSnapshot();
+        const wordmarkFontFamily = FONT_FAMILY_VAR[wordmarkFont];
 
         for (let i = 0; i < WORDMARK.length; i++) {
           const el = letterRefs.current[i];
@@ -123,6 +124,13 @@ export default function HomeContent() {
             glow > 0.02 ? `drop-shadow(0 0 ${(4 + glow * 9).toFixed(1)}px rgba(${accent}, ${(glow * 0.55).toFixed(2)}))` : "";
           el.dataset.accent = accent;
 
+          // Settings > (landing page title): font/color/weight for the
+          // wordmark specifically - the white-to-color gradient replaces the
+          // fixed white-to-emerald one via the same bg-clip-text trick.
+          el.style.fontFamily = wordmarkFontFamily;
+          el.style.fontWeight = String(wordmarkWeight);
+          el.style.backgroundImage = `linear-gradient(to bottom, white, rgba(${wordmarkColor}, 0.4))`;
+
           if (glow > DUST_THRESHOLD && now - lastDustAt[i] > DUST_INTERVAL_MS) {
             lastDustAt[i] = now;
             emitDust(base.x + repelX, base.y + repelY, 1);
@@ -149,7 +157,7 @@ export default function HomeContent() {
     <div className="flex min-h-screen flex-col items-center gap-14 px-6 pt-20 text-center sm:pt-28">
       <AccountBadge />
       <div className="flex flex-col items-center gap-4">
-        <h1 className="flex items-baseline text-5xl font-semibold tracking-[0.2em] drop-shadow-[0_0_25px_rgba(80,200,120,0.35)] sm:text-7xl">
+        <h1 className="wordmark-text flex items-baseline font-semibold tracking-[0.2em] drop-shadow-[0_0_25px_rgba(80,200,120,0.35)]">
           {WORDMARK.map((letter, i) => (
             <motion.span
               key={i}

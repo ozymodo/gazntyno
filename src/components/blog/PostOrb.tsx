@@ -11,9 +11,15 @@ const ACCENT = "56, 145, 255";
 export function orbLayout(post: BlogPost, index: number, total: number) {
   const seed = hashSeed(post.id);
   const { left, top } = gridPosition(seed, index, total);
-  const size = Math.min(136, Math.max(88, 84 + Math.min(post.body.length, 800) / 16));
+  const titleLength = post.title.trim().length || 1;
+  // Sized off the title, not the body - a longer title gets a bigger bubble
+  // (and a slightly smaller font below) so the whole thing fits without
+  // truncating. Square-root growth keeps a very long title from ballooning
+  // the bubble linearly.
+  const size = Math.min(190, Math.max(92, 78 + Math.sqrt(titleLength) * 15));
+  const fontSize = Math.max(10, Math.min(15, 16 - Math.sqrt(titleLength) * 0.7));
   const { driftX, driftY, duration, delay } = driftParams(seed);
-  return { left, top, size, driftX, driftY, duration, delay };
+  return { left, top, size, fontSize, driftX, driftY, duration, delay };
 }
 
 export default function PostOrb({
@@ -27,7 +33,7 @@ export default function PostOrb({
   total: number;
   onOpen: () => void;
 }) {
-  const { left, top, size, driftX, driftY, duration, delay } = orbLayout(post, index, total);
+  const { left, top, size, fontSize, driftX, driftY, duration, delay } = orbLayout(post, index, total);
   const { burstAt } = useSceneTransition();
 
   const handleOpen = (e: MouseEvent<HTMLButtonElement>) => {
@@ -68,7 +74,10 @@ export default function PostOrb({
         className="pointer-events-none absolute inset-0 rounded-full opacity-50 blur-xl transition-opacity duration-300 group-hover:opacity-90"
         style={{ background: `radial-gradient(circle, rgba(${ACCENT}, 0.35), transparent 70%)` }}
       />
-      <span className="relative line-clamp-3 text-xs font-medium leading-snug text-white/80 sm:text-sm">
+      <span
+        className="relative max-w-[80%] break-words font-medium leading-snug text-white/80"
+        style={{ fontSize }}
+      >
         {post.title}
       </span>
     </motion.button>
