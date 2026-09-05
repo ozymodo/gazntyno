@@ -2,6 +2,7 @@
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { type MouseEvent, useState, useSyncExternalStore } from "react";
+import { awardBlogPostXp } from "@/lib/account";
 import {
   type BlogPost,
   deletePost,
@@ -33,6 +34,7 @@ export default function BlogContent() {
 
   const handleCreate = (title: string, body: string) => {
     savePost({ title, body });
+    awardBlogPostXp();
     setOverlay(null);
   };
 

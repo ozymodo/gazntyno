@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
-import UtilityButton from "@/components/home/UtilityButton";
 import { useSceneTransition } from "@/components/scene/scene-context";
 import { getSettingsSnapshot } from "@/lib/settings";
 
@@ -147,7 +146,6 @@ export default function HomeContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center gap-14 px-6 pt-20 text-center sm:pt-28">
-      <UtilityButton />
       <div className="flex flex-col items-center gap-4">
         <h1 className="flex items-baseline text-5xl font-semibold tracking-[0.2em] drop-shadow-[0_0_25px_rgba(80,200,120,0.35)] sm:text-7xl">
           {WORDMARK.map((letter, i) => (

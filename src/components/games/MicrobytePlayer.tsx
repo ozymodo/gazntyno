@@ -2,12 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { awardMicrobyteMinute } from "@/lib/account";
 
 const ACCENT = "52, 199, 110";
+const PLAYTIME_TICK_MS = 60_000;
 
 export default function MicrobytePlayer() {
   const [loaded, setLoaded] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+
+  // Counts "on this page with the game loaded" as played time - there's no
+  // reach into the iframe's own state across the boundary, but XP ticks are
+  // rate-limited to one per minute anyway, so this is a reasonable proxy.
+  useEffect(() => {
+    if (!loaded) return;
+    const interval = setInterval(awardMicrobyteMinute, PLAYTIME_TICK_MS);
+    return () => clearInterval(interval);
+  }, [loaded]);
 
   // The iframe ships with no `src` in the server-rendered markup and gets
   // one assigned here instead. If `src` were set from the first render, the

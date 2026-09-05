@@ -2,6 +2,7 @@
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { type MouseEvent, useState, useSyncExternalStore } from "react";
+import { awardMediaUploadXp, awardMediaViewXp } from "@/lib/account";
 import {
   addMedia,
   deleteMedia,
@@ -34,6 +35,7 @@ export default function MediaContent() {
 
   const handleCreate = async (file: File, caption: string) => {
     await addMedia(file, caption);
+    awardMediaUploadXp();
     setOverlay(null);
   };
 
@@ -73,7 +75,10 @@ export default function MediaContent() {
                 item={item}
                 index={index}
                 total={items.length}
-                onOpen={() => setOverlay({ type: "view", item })}
+                onOpen={() => {
+                  awardMediaViewXp(item.id);
+                  setOverlay({ type: "view", item });
+                }}
               />
             );
           })}

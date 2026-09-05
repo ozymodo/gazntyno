@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import HomeButton from "@/components/scene/HomeButton";
+import UtilityButton from "@/components/scene/UtilityButton";
 import { SceneContext, type SceneContextValue } from "@/components/scene/scene-context";
+import { awardNavigationXp } from "@/lib/account";
 import {
   colorToUnitRgb,
   getServerSettingsSnapshot,
@@ -176,6 +178,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     pathnameRef.current = pathname;
+    awardNavigationXp();
   }, [pathname]);
 
   useEffect(() => {
@@ -883,6 +886,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           rather than one fading out while the other fades in. */}
       <LayoutGroup>
         {pathname !== "/" && <HomeButton />}
+        <UtilityButton />
         <div ref={contentRef} className="relative z-10" style={{ opacity: 1, transformStyle: "preserve-3d" }}>
           {children}
         </div>

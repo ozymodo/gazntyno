@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import ComingSoon from "@/components/common/ComingSoon";
+import AccountContent from "@/components/account/AccountContent";
 
 export const metadata: Metadata = {
   title: "Account — Technature",
-  description: "Account settings for Technature.",
+  description: "Your profile and progress on Technature.",
 };
 
 export default function AccountPage() {
-  return <ComingSoon title="ACCOUNT" tagline="Coming soon." accent="210, 180, 220" />;
+  return <AccountContent />;
 }
