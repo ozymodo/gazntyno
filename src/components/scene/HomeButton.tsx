@@ -6,7 +6,7 @@ import type { MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { DEFAULT_WORDMARK, getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
 import { useSceneTransition } from "@/components/scene/scene-context";
-import { getSettingsSnapshot } from "@/lib/settings";
+import { FONT_FAMILY_VAR, getSettingsSnapshot } from "@/lib/settings";
 
 // Matches HomeContent's layoutId/transition exactly, so the hero title and
 // this button read as the same letters flying between pages. Both read the
@@ -161,14 +161,16 @@ export default function HomeButton() {
       const dt = Math.min((now - last) / 1000, 1 / 30);
       last = now;
 
-      const { accent, reducedMotion } = getSettingsSnapshot();
-      const [ar, ag, ab] = accent.split(",").map((n) => parseInt(n.trim(), 10) || 0);
-      // A pale, mostly-white version of the accent — the letters' fully
-      // hovered-in color, same "white tinted by the accent" look regardless
-      // of which color is picked.
-      const pr = Math.round(255 + (ar - 255) * 0.22);
-      const pg = Math.round(255 + (ag - 255) * 0.22);
-      const pb = Math.round(255 + (ab - 255) * 0.22);
+      const { accent, reducedMotion, wordmarkFont, wordmarkColor, wordmarkWeight } = getSettingsSnapshot();
+      const wordmarkFontFamily = FONT_FAMILY_VAR[wordmarkFont];
+      const [wr, wg, wb] = wordmarkColor.split(",").map((n) => parseInt(n.trim(), 10) || 0);
+      // A pale, mostly-white version of the landing page title's own color -
+      // same Settings > (landing page title) Color the hero wordmark shades
+      // into, so the hero and this nav button read as the same letters
+      // wearing the same look, not just handed off by animation.
+      const pr = Math.round(255 + (wr - 255) * 0.22);
+      const pg = Math.round(255 + (wg - 255) * 0.22);
+      const pb = Math.round(255 + (wb - 255) * 0.22);
 
       const hoverRate = hoveredRef.current ? HOVER_IN_RATE : HOVER_OUT_RATE;
       hoverAmountRef.current +=
@@ -235,6 +237,8 @@ export default function HomeButton() {
         const bch = Math.round(255 + (pb - 255) * hoverT);
         const alpha = (0.7 + 0.3 * hoverT).toFixed(2);
         el.style.color = `rgba(${r}, ${g}, ${bch}, ${alpha})`;
+        el.style.fontFamily = wordmarkFontFamily;
+        el.style.fontWeight = String(wordmarkWeight);
         el.style.textShadow =
           hoverT > 0.01
             ? `0 0 ${(10 * hoverT).toFixed(1)}px rgba(${accent}, ${(0.85 * hoverT).toFixed(2)}), 0 0 ${(24 * hoverT).toFixed(1)}px rgba(${accent}, ${(0.5 * hoverT).toFixed(2)})`
