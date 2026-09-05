@@ -11,7 +11,7 @@ import {
   savePost,
   subscribePosts,
 } from "@/lib/blog";
-import { getCreatorAuthSnapshot, getServerCreatorAuthSnapshot, isOwnerUid, subscribeCreatorAuth } from "@/lib/creatorAuth";
+import { getAuthSnapshot, getServerAuthSnapshot, isOwnerUid, subscribeAuth } from "@/lib/auth";
 import {
   deleteGlobalPost,
   type GlobalBlogPost,
@@ -39,8 +39,8 @@ type Overlay = { type: "new" } | { type: "edit"; post: FeedPost } | { type: "vie
 export default function BlogContent() {
   const localPosts = useSyncExternalStore(subscribePosts, getPostsSnapshot, getServerPostsSnapshot);
   const globalPosts = useSyncExternalStore(subscribeGlobalPosts, getGlobalPostsSnapshot, getServerGlobalPostsSnapshot);
-  const creatorAuth = useSyncExternalStore(subscribeCreatorAuth, getCreatorAuthSnapshot, getServerCreatorAuthSnapshot);
-  const isOwner = isOwnerUid(creatorAuth.uid);
+  const auth = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getServerAuthSnapshot);
+  const isOwner = isOwnerUid(auth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const { burstAt } = useSceneTransition();
 

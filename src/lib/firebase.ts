@@ -18,7 +18,11 @@ const firebaseConfig = {
 /** The one account allowed to write to the shared/global posts + media - see firestore.rules and storage.rules. */
 export const OWNER_UID = process.env.NEXT_PUBLIC_OWNER_UID ?? "";
 
-export const firebaseEnabled = Object.values(firebaseConfig).every(Boolean) && OWNER_UID !== "";
+// Only gated on the core config - sign-in and per-user Firestore data work
+// for everyone regardless of whether an owner/creator account has been
+// designated yet. OWNER_UID being unset just means nobody can post to the
+// shared Blog/Media feed (see isOwnerUid in lib/auth.ts).
+export const firebaseEnabled = Object.values(firebaseConfig).every(Boolean);
 
 // Lazy + guarded: this module is imported from client components that render
 // during `next build`'s static prerender (a Node environment with no

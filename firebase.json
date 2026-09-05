@@ -4,5 +4,15 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "auth": {
+    "authorizedDomains": ["localhost", "ozymodo.github.io"],
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Technature",
+        "supportEmail": "gazntynox@gmail.com"
+      }
+    }
   }
 }

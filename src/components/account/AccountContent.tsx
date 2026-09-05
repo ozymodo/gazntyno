@@ -14,7 +14,8 @@ import {
   WORDMARK_MAX_LENGTH,
 } from "@/lib/account";
 import { Row, Section } from "@/components/common/Panel";
-import CreatorSignIn from "@/components/account/CreatorSignIn";
+import AuthPanel from "@/components/account/AuthPanel";
+import { getAuthSnapshot, getServerAuthSnapshot, subscribeAuth } from "@/lib/auth";
 
 const ACCENT = "210, 180, 220";
 // Local state persists on a short debounce rather than every keystroke, so
@@ -36,6 +37,7 @@ const STAT_LABELS: {
 
 export default function AccountContent() {
   const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot, getServerAccountSnapshot);
+  const auth = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getServerAuthSnapshot);
   // Only holds a value while the field is being actively edited (including
   // its debounce window) - otherwise falls through to the store's value.
   // Deriving the displayed value this way, instead of seeding useState from
@@ -103,7 +105,9 @@ export default function AccountContent() {
 
       <div className="relative flex flex-col items-center gap-2">
         <h1 className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl">ACCOUNT</h1>
-        <p className="max-w-md text-sm text-white/40">Your profile and progress on Technature. Saved on this device.</p>
+        <p className="max-w-md text-sm text-white/40">
+          Your profile and progress on Technature. {auth.uid ? "Synced to your account." : "Saved on this device."}
+        </p>
       </div>
 
       <div className="relative flex w-full flex-col items-center gap-8">
@@ -225,7 +229,7 @@ export default function AccountContent() {
           </div>
         </Section>
 
-        <CreatorSignIn />
+        <AuthPanel />
       </div>
     </div>
   );

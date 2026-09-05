@@ -3,7 +3,7 @@
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { type MouseEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { awardMediaUploadXp, awardMediaViewXp } from "@/lib/account";
-import { getCreatorAuthSnapshot, getServerCreatorAuthSnapshot, isOwnerUid, subscribeCreatorAuth } from "@/lib/creatorAuth";
+import { getAuthSnapshot, getServerAuthSnapshot, isOwnerUid, subscribeAuth } from "@/lib/auth";
 import {
   addGlobalMedia,
   deleteGlobalMedia,
@@ -40,8 +40,8 @@ type Overlay = { type: "new" } | { type: "edit"; item: FeedMediaItem } | { type:
 export default function MediaContent() {
   const localItems = useSyncExternalStore(subscribeMedia, getMediaSnapshot, getServerMediaSnapshot);
   const globalItems = useSyncExternalStore(subscribeGlobalMedia, getGlobalMediaSnapshot, getServerGlobalMediaSnapshot);
-  const creatorAuth = useSyncExternalStore(subscribeCreatorAuth, getCreatorAuthSnapshot, getServerCreatorAuthSnapshot);
-  const isOwner = isOwnerUid(creatorAuth.uid);
+  const auth = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getServerAuthSnapshot);
+  const isOwner = isOwnerUid(auth.uid);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const { burstAt } = useSceneTransition();
 

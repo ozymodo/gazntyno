@@ -1,3 +1,7 @@
+import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import { getAuthSnapshot, subscribeAuth } from "@/lib/auth";
+import { firebaseEnabled, getFirebaseDb } from "@/lib/firebase";
+
 export type AccountStats = {
   posts: number;
   mediaAdded: number;
@@ -68,6 +72,11 @@ const cooldowns = new Map<string, number>();
 let cache: Account = DEFAULT_ACCOUNT;
 let hydrated = false;
 const listeners = new Set<() => void>();
+// The signed-in uid this store is currently synced to, or null when reading/
+// writing localStorage as a guest - see startFirestoreSync/handleAuthChange
+// below. Set as soon as sign-in is known, before the Firestore doc read
+// resolves, so a profile edit made in that gap still lands on the right uid.
+let activeUid: string | null = null;
 
 // Only the localStorage-persisted fields - pictureUrl is derived from
 // IndexedDB separately and merged in by every caller below, so it's never
@@ -108,6 +117,13 @@ function readFromStorage(): PersistedFields {
 }
 
 function persist() {
+  if (activeUid) {
+    const db = getFirebaseDb();
+    if (!db) return;
+    const { username, bio, wordmark, xp, stats } = cache;
+    setDoc(doc(db, "users", activeUid), { username, bio, wordmark, xp, stats }, { merge: true }).catch(() => {});
+    return;
+  }
   if (typeof window !== "undefined") {
     const { username, bio, wordmark, xp, stats } = cache;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ username, bio, wordmark, xp, stats }));
@@ -127,11 +143,67 @@ function ensureHydrated() {
 if (typeof window !== "undefined") {
   ensureHydrated();
   window.addEventListener("storage", (e) => {
-    if (e.key === STORAGE_KEY) {
+    if (e.key === STORAGE_KEY && !activeUid) {
       cache = { ...readFromStorage(), pictureUrl: cache.pictureUrl };
       emit();
     }
   });
+}
+
+let firestoreUnsub: (() => void) | null = null;
+
+function stopFirestoreSync() {
+  if (firestoreUnsub) {
+    firestoreUnsub();
+    firestoreUnsub = null;
+  }
+}
+
+async function startFirestoreSync(uid: string) {
+  const db = getFirebaseDb();
+  if (!db) return;
+  const ref = doc(db, "users", uid);
+  // First sign-in for this uid: seed the cloud profile from whatever guest
+  // progress this device already has, so it isn't silently discarded. A
+  // returning uid (already has a doc) keeps its cloud values untouched -
+  // this device's stale local copy loses out, which is the right call for
+  // syncing the same account across devices.
+  try {
+    const existing = await getDoc(ref);
+    if (uid !== activeUid) return; // signed out again before this resolved
+    if (!existing.exists()) {
+      const { username, bio, wordmark, xp, stats } = cache;
+      await setDoc(ref, { username, bio, wordmark, xp, stats });
+    }
+  } catch {
+    return;
+  }
+  if (uid !== activeUid) return;
+  firestoreUnsub = onSnapshot(ref, (snap) => {
+    if (!snap.exists()) return;
+    cache = { ...sanitize(snap.data()), pictureUrl: cache.pictureUrl };
+    emit();
+  });
+}
+
+function handleAuthChange(auth: { uid: string | null }) {
+  if (auth.uid === activeUid) return;
+  stopFirestoreSync();
+  activeUid = auth.uid;
+  if (activeUid) {
+    startFirestoreSync(activeUid);
+  } else {
+    cache = { ...readFromStorage(), pictureUrl: cache.pictureUrl };
+    emit();
+  }
+}
+
+// Profile/XP/stats sync to Firestore under the signed-in uid instead of
+// staying local to this device - see lib/auth.ts. Signed out (or Firebase
+// unset) falls back to the localStorage behavior above unchanged.
+if (typeof window !== "undefined" && firebaseEnabled) {
+  handleAuthChange(getAuthSnapshot());
+  subscribeAuth(() => handleAuthChange(getAuthSnapshot()));
 }
 
 export function subscribeAccount(listener: () => void) {
