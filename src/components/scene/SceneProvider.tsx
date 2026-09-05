@@ -4,6 +4,7 @@ import { LayoutGroup } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
+import FreeroamJoystick from "@/components/scene/FreeroamJoystick";
 import HomeButton from "@/components/scene/HomeButton";
 import UtilityButton from "@/components/scene/UtilityButton";
 import { SceneContext, type SceneContextValue } from "@/components/scene/scene-context";
@@ -95,6 +96,8 @@ const FREEROAM_DASH_DURATION = 0.35; // seconds the dash impulse decays over
 const FREEROAM_DASH_COOLDOWN = 0.7; // seconds before another dash can trigger
 const FREEROAM_ACCEL_RATE = 6; // 1/sec - how quickly velocity chases the input direction
 const FREEROAM_LOOK_SENSITIVITY = 0.0022; // radians per pixel of mouse movement
+const FREEROAM_TOUCH_LOOK_SENSITIVITY = 0.0032; // radians per pixel of finger drag - a bit hotter than the mouse, since a drag covers less screen than a mouse's unbounded movementX
+const FREEROAM_TAP_MOVE_THRESHOLD = 12; // px - a look-drag shorter than this on release counts as a tap (drop a node) instead
 const FREEROAM_PITCH_LIMIT = Math.PI / 2 - 0.05;
 const FREEROAM_FADE_S = 0.4; // page dissolve/reassemble duration
 const FREEROAM_RETURN_DURATION = 1.1; // camera flight back to the resting view on exit
@@ -138,6 +141,23 @@ function easeInOutCubic(x: number) {
 function smoothstep(edge0: number, edge1: number, x: number) {
   const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
   return t * t * (3 - 2 * t);
+}
+
+// Decides whether freeroam's on-screen touch controls (joystick + exit
+// button) render - a coarse (touch) primary pointer, rather than checking
+// screen size, so a touch laptop or tablet with a mouse attached still gets
+// the mouse/keyboard scheme it actually has.
+const COARSE_POINTER_QUERY = "(pointer: coarse)";
+function subscribeCoarsePointer(callback: () => void) {
+  const mql = window.matchMedia(COARSE_POINTER_QUERY);
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+function getCoarsePointerSnapshot() {
+  return window.matchMedia(COARSE_POINTER_QUERY).matches;
+}
+function getServerCoarsePointerSnapshot() {
+  return false;
 }
 
 const VERTEX_SHADER = /* glsl */ `
@@ -208,6 +228,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
   const enterFreeroam = useCallback(() => {
     enterFreeroamImplRef.current();
   }, []);
+  const exitFreeroamImplRef = useRef<() => void>(() => {});
+  // Read imperatively from the tick loop, same reasoning as `mouse` above -
+  // the joystick writes to it on every touchmove without needing a re-render.
+  const freeroamMove = useRef({ x: 0, z: 0 });
   const getPointer = useCallback(() => mouse.current, []);
   const [utilityVisible, setUtilityVisible] = useState(true);
   const contextValue = useMemo<SceneContextValue>(
@@ -219,6 +243,11 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
   // page-content wrapper that the imperative dissolve/reassemble fade below
   // controls, so it needs its own bit of reactive state.
   const [freeroamActive, setFreeroamActive] = useState(false);
+  const isCoarsePointer = useSyncExternalStore(
+    subscribeCoarsePointer,
+    getCoarsePointerSnapshot,
+    getServerCoarsePointerSnapshot,
+  );
 
   // The freeroam XP readout reads the same account store every other XP
   // source (posting, media, Microbyte, ...) writes to, so it's always the
@@ -507,6 +536,21 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     let freeroamReturn: FreeroamReturn | null = null;
     const keysDown = new Set<string>();
 
+    // Touch look: the one non-joystick finger drags the camera around,
+    // tracked by its own pointerId so a second finger on the joystick
+    // doesn't get mistaken for it. Released without much movement, it
+    // counts as a tap (drop a node at the crosshair) instead of a look.
+    let lookTouchId: number | null = null;
+    let lookTouchPos: { x: number; y: number } | null = null;
+    let lookTouchStart: { x: number; y: number } | null = null;
+    let lookTouchMoved = false;
+    const resetLookTouch = () => {
+      lookTouchId = null;
+      lookTouchPos = null;
+      lookTouchStart = null;
+      lookTouchMoved = false;
+    };
+
     // The particle or gate (if any) currently near enough to the crosshair
     // to lock onto - recomputed every frame in the tick loop below, consumed
     // when Enter is pressed. Particles carry their buffer index so the zoom
@@ -544,6 +588,8 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       aimCandidate = null;
       freeroamZoom = null;
       keysDown.clear();
+      resetLookTouch();
+      freeroamMove.current = { x: 0, z: 0 };
       // Clears any highlight left over from the cursor at the moment freeroam
       // took over, since the normal per-frame highlight pass is skipped
       // while active and would otherwise leave a few particles stuck bright.
@@ -585,11 +631,14 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       aimCandidate = null;
       freeroamZoom = null;
       keysDown.clear();
+      resetLookTouch();
+      freeroamMove.current = { x: 0, z: 0 };
       gate.mesh.visible = false;
       setFreeroamActive(false);
       if (document.pointerLockElement) document.exitPointerLock();
     };
     enterFreeroamImplRef.current = enterFreeroam;
+    exitFreeroamImplRef.current = exitFreeroam;
 
     // Enter locks onto whatever's under the crosshair and starts the rapid
     // zoom-in flight (handled per-frame in the tick loop); a plain click
@@ -711,16 +760,31 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       burstParticles(x, y, count);
     };
 
+    const applyLookDelta = (dx: number, dy: number, sensitivity: number) => {
+      freeroam.yaw -= dx * sensitivity;
+      freeroam.pitch -= dy * sensitivity;
+      freeroam.pitch = Math.max(-FREEROAM_PITCH_LIMIT, Math.min(FREEROAM_PITCH_LIMIT, freeroam.pitch));
+    };
+
     const onPointerMove = (e: PointerEvent) => {
       mouse.current = { x: e.clientX, y: e.clientY };
       if (!dive) {
         targetCam.x = (e.clientX / width - 0.5) * 2;
         targetCam.y = (e.clientY / height - 0.5) * 2;
       }
-      if (freeroam.active) {
-        freeroam.yaw -= e.movementX * FREEROAM_LOOK_SENSITIVITY;
-        freeroam.pitch -= e.movementY * FREEROAM_LOOK_SENSITIVITY;
-        freeroam.pitch = Math.max(-FREEROAM_PITCH_LIMIT, Math.min(FREEROAM_PITCH_LIMIT, freeroam.pitch));
+      if (!freeroam.active) return;
+      if (e.pointerType === "touch") {
+        if (e.pointerId !== lookTouchId || !lookTouchPos) return;
+        const dx = e.clientX - lookTouchPos.x;
+        const dy = e.clientY - lookTouchPos.y;
+        applyLookDelta(dx, dy, FREEROAM_TOUCH_LOOK_SENSITIVITY);
+        lookTouchPos = { x: e.clientX, y: e.clientY };
+        if (lookTouchStart) {
+          const traveled = Math.hypot(e.clientX - lookTouchStart.x, e.clientY - lookTouchStart.y);
+          if (traveled > FREEROAM_TAP_MOVE_THRESHOLD) lookTouchMoved = true;
+        }
+      } else {
+        applyLookDelta(e.movementX, e.movementY, FREEROAM_LOOK_SENSITIVITY);
       }
     };
     const onPointerLeave = () => {
@@ -728,15 +792,40 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     };
     const onPointerDown = (e: PointerEvent) => {
       if (freeroam.active) {
+        if (e.pointerType === "touch") {
+          // The joystick calls stopPropagation on its own pointer events, so
+          // any touch reaching here started somewhere else on screen - the
+          // one finger available for looking/tapping.
+          if (lookTouchId === null) {
+            lookTouchId = e.pointerId;
+            lookTouchPos = { x: e.clientX, y: e.clientY };
+            lookTouchStart = { x: e.clientX, y: e.clientY };
+            lookTouchMoved = false;
+          }
+          return;
+        }
         spawnNodeAtCrosshair();
         return;
       }
       spawnParticle(e.clientX, e.clientY);
       recordNodeCreated();
     };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== lookTouchId) return;
+      // A short tap (barely moved) drops a node, same as a click would -
+      // a drag that actually turned the camera doesn't also spawn one.
+      if (freeroam.active && !lookTouchMoved) spawnNodeAtCrosshair();
+      resetLookTouch();
+    };
+    const onPointerCancel = (e: PointerEvent) => {
+      if (e.pointerId !== lookTouchId) return;
+      resetLookTouch();
+    };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerleave", onPointerLeave);
     window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && freeroam.active) {
@@ -973,8 +1062,14 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           if (keysDown.has("s")) moveZ -= 1;
           if (keysDown.has("d")) moveX += 1;
           if (keysDown.has("a")) moveX -= 1;
+          // The joystick reports an analog vector (magnitude 0-1) rather
+          // than WASD's on/off - clamp instead of always-normalize, so a
+          // gentle push actually moves slower instead of snapping to full
+          // speed the moment it's off-center.
+          moveX += freeroamMove.current.x;
+          moveZ += freeroamMove.current.z;
           const inputLen = Math.hypot(moveX, moveZ);
-          if (inputLen > 0) {
+          if (inputLen > 1) {
             moveX /= inputLen;
             moveZ /= inputLen;
           }
@@ -1297,6 +1392,8 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("pointerlockchange", onPointerLockChange);
@@ -1334,9 +1431,25 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           <p className="absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/60">
             Lv {level} · {xp.toLocaleString()} XP
           </p>
-          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/40">
-            WASD to move · Shift to sprint · Space to dash · Enter to lock on · Esc to return
-          </p>
+          {isCoarsePointer ? (
+            <>
+              <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-xs uppercase tracking-[0.3em] text-white/40">
+                Joystick to move · Drag to look · Tap to drop a node
+              </p>
+              <FreeroamJoystick onMove={(x, z) => { freeroamMove.current = { x, z }; }} />
+              <button
+                type="button"
+                onClick={() => exitFreeroamImplRef.current()}
+                className="pointer-events-auto fixed right-8 top-6 z-30 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-white/70 backdrop-blur-md transition-colors hover:border-white/30 hover:text-white"
+              >
+                Exit
+              </button>
+            </>
+          ) : (
+            <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/40">
+              WASD to move · Shift to sprint · Space to dash · Enter to lock on · Esc to return
+            </p>
+          )}
         </div>
       )}
     </SceneContext.Provider>

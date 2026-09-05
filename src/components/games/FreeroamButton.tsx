@@ -1,36 +1,12 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 // Matches the Games page's own accent (GamesContent/MicrobytePlayer).
 const ACCENT = "52, 199, 110";
-const FINE_POINTER_QUERY = "(pointer: fine)";
-
-function subscribeFinePointer(callback: () => void) {
-  const mql = window.matchMedia(FINE_POINTER_QUERY);
-  mql.addEventListener("change", callback);
-  return () => mql.removeEventListener("change", callback);
-}
-
-function getFinePointerSnapshot() {
-  return window.matchMedia(FINE_POINTER_QUERY).matches;
-}
-
-// SSR (and a touch-only client) render nothing - keeps this in step with
-// the server markup instead of flashing in on mount.
-function getServerFinePointerSnapshot() {
-  return false;
-}
 
 export default function FreeroamButton() {
   const { enterFreeroam } = useSceneTransition();
-  // Freeroam is WASD + mouse-look via Pointer Lock, with Escape as the only
-  // way out - none of that exists on a touch-only device, so the button
-  // would just strand someone with a camera they can't move or escape.
-  const canFreeroam = useSyncExternalStore(subscribeFinePointer, getFinePointerSnapshot, getServerFinePointerSnapshot);
-
-  if (!canFreeroam) return null;
 
   return (
     <button
