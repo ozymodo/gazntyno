@@ -51,3 +51,38 @@ body {
 .animate-breathe-slow {
   animation: breathe-slow 6s ease-in-out infinite;
 }
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--orb-glow, rgba(255, 255, 255, 0.2));
+  }
+  50% {
+    box-shadow: 0 0 30px 6px var(--orb-glow, rgba(255, 255, 255, 0.2));
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    translate: -50% -50%;
+  }
+  33% {
+    translate: calc(-50% + var(--drift-x, 12px)) calc(-50% - var(--drift-y, 10px));
+  }
+  66% {
+    translate: calc(-50% - var(--drift-x, 12px)) calc(-50% + var(--drift-y, 10px));
+  }
+}
+
+/* Blog orbs pulse (box-shadow only, no transform) and drift (the `translate`
+   property, independent of `transform`) at the same time. Both deliberately
+   avoid the `transform` property, which framer-motion's layoutId animation
+   drives directly when an orb morphs into the editor/viewer overlay — so
+   the CSS animation and the layout animation never fight over one property. */
+.animate-orb {
+  animation:
+    pulse-glow var(--orb-breathe-duration, 6.5s) ease-in-out infinite,
+    drift var(--orb-drift-duration, 9s) ease-in-out infinite;
+  animation-delay: var(--orb-breathe-delay, 0s), var(--orb-drift-delay, 0s);
+}

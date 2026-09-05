@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import ComingSoon from "@/components/common/ComingSoon";
+import BlogContent from "@/components/blog/BlogContent";
 
 export const metadata: Metadata = {
   title: "Blog — Technature",
-  description: "Writing from Technature, coming soon.",
+  description: "Writing from Technature.",
 };
 
 export default function BlogPage() {
-  return (
-    <ComingSoon
-      title="BLOG"
-      tagline="Posts are still taking root. Check back soon."
-      accent="45, 158, 138"
-    />
-  );
+  return <BlogContent />;
 }
