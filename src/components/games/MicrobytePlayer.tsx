@@ -87,9 +87,7 @@ export default function MicrobytePlayer() {
       <div className="relative flex flex-col items-center gap-3 text-center">
         <h1 className="text-4xl font-semibold tracking-wide text-white">Microbyte</h1>
         <p className="max-w-xl text-sm leading-relaxed text-white/60">
-          A tiny organism wakes up inside a dying machine and has to grow, adapt, and spread
-          before the system purges it. Guide it through decaying circuitry, out-compete rival
-          strains, and find a way to survive.
+          microbyte is still in development expect improvements to mechanics, visuals, and performance over time. play as a tiny organism in a microscopic world. survive, hunt, and multiply in a dynamic ecosystem teeming with life. microbyte is a unique genre blend of rougelite, simulation, and stategy.
         </p>
       </div>
 

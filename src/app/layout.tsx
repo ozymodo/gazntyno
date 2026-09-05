@@ -20,7 +20,7 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "Technature",
+  title: "gazntyno",
   description: "Games, blog posts, and media, all in one living space.",
 };
 

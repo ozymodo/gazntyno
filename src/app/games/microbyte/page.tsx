@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import MicrobytePlayer from "@/components/games/MicrobytePlayer";
 
 export const metadata: Metadata = {
-  title: "Microbyte — Technature",
+  title: "Microbyte — gazntyno",
   description: "Play Microbyte, an indie survival-strategy game, right in your browser.",
 };
 

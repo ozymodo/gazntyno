@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import BlogContent from "@/components/blog/BlogContent";
 
 export const metadata: Metadata = {
-  title: "Blog — Technature",
-  description: "Writing from Technature.",
+  title: "Blog — gazntyno",
+  description: "Writing from gazntyno.",
 };
 
 export default function BlogPage() {

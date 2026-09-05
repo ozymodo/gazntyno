@@ -195,7 +195,7 @@ export default function HomeContent() {
           ))}
         </h1>
         <p className="max-w-md text-balance text-sm text-white/50 sm:text-base">
-          An evolving space for games, words, and everything in between.
+          an evolving space for games, words, and everything in between.
         </p>
       </div>
 
