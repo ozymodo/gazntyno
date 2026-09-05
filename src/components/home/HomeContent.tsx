@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
+import UtilityButton from "@/components/home/UtilityButton";
 import { useSceneTransition } from "@/components/scene/scene-context";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 type NavOrb = {
   label: string;
@@ -80,6 +82,7 @@ export default function HomeContent() {
         if (baseCenters.length === 0) measure();
         const t = now / 1000;
         const pointer = getPointer();
+        const { accent, reducedMotion } = getSettingsSnapshot();
 
         for (let i = 0; i < WORDMARK.length; i++) {
           const el = letterRefs.current[i];
@@ -87,9 +90,10 @@ export default function HomeContent() {
           if (!el || !base) continue;
 
           // Gentle ambient bob, out of phase per letter so the word drifts
-          // like something adrift in liquid rather than pulsing in unison.
-          const floatX = Math.sin(t * (0.45 + seeded(i, 1) * 0.35) + seeded(i, 2) * 10) * 3;
-          const floatY = Math.cos(t * (0.35 + seeded(i, 3) * 0.35) + seeded(i, 4) * 10) * 4.5;
+          // like something adrift in liquid rather than pulsing in unison -
+          // skipped under Settings > Reduced motion.
+          const floatX = reducedMotion ? 0 : Math.sin(t * (0.45 + seeded(i, 1) * 0.35) + seeded(i, 2) * 10) * 3;
+          const floatY = reducedMotion ? 0 : Math.cos(t * (0.35 + seeded(i, 3) * 0.35) + seeded(i, 4) * 10) * 4.5;
 
           let targetInfluence = 0;
           let nx = 0;
@@ -116,9 +120,8 @@ export default function HomeContent() {
 
           el.style.transform = `translate(${(floatX + repelX).toFixed(2)}px, ${(floatY + repelY).toFixed(2)}px) scale(${(1 + glow * 0.06).toFixed(3)})`;
           el.style.filter =
-            glow > 0.02
-              ? `drop-shadow(0 0 ${(4 + glow * 9).toFixed(1)}px rgba(120, 255, 150, ${(glow * 0.55).toFixed(2)}))`
-              : "";
+            glow > 0.02 ? `drop-shadow(0 0 ${(4 + glow * 9).toFixed(1)}px rgba(${accent}, ${(glow * 0.55).toFixed(2)}))` : "";
+          el.dataset.accent = accent;
 
           if (glow > DUST_THRESHOLD && now - lastDustAt[i] > DUST_INTERVAL_MS) {
             lastDustAt[i] = now;
@@ -144,6 +147,7 @@ export default function HomeContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center gap-14 px-6 pt-20 text-center sm:pt-28">
+      <UtilityButton />
       <div className="flex flex-col items-center gap-4">
         <h1 className="flex items-baseline text-5xl font-semibold tracking-[0.2em] drop-shadow-[0_0_25px_rgba(80,200,120,0.35)] sm:text-7xl">
           {WORDMARK.map((letter, i) => (

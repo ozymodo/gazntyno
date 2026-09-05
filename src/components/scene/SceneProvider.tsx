@@ -2,10 +2,17 @@
 
 import { LayoutGroup } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import HomeButton from "@/components/scene/HomeButton";
 import { SceneContext, type SceneContextValue } from "@/components/scene/scene-context";
+import {
+  colorToUnitRgb,
+  getServerSettingsSnapshot,
+  getSettingsSnapshot,
+  subscribeSettings,
+  type ParticleDensity,
+} from "@/lib/settings";
 
 const CURSOR_REACH = 170;
 const TARGET_REACH = 230;
@@ -50,18 +57,33 @@ function depthForPath(pathname: string) {
 }
 
 // Each section's interior carries its button's own hue blended into the
-// forest-green baseline, so the particle field (and cursor lines) pick up a
-// little of "the button that was pressed" the deeper you go.
-const ROUTE_ACCENT: Record<string, { color: [number, number, number]; mix: number; line: string }> = {
-  "/games": { color: [52 / 255, 199 / 255, 110 / 255], mix: 0.4, line: "90, 210, 140" },
-  "/blog": { color: [56 / 255, 145 / 255, 255 / 255], mix: 0.4, line: "120, 185, 255" },
-  "/media": { color: [214 / 255, 168 / 255, 68 / 255], mix: 0.4, line: "220, 190, 120" },
+// particle field's node color, so the field picks up a little of "the
+// button that was pressed" the deeper you go. Branded routes keep this fixed
+// regardless of the user's Settings > Node color choice; neutral routes
+// (home, settings, account, ...) get no blend at all (mix 0), so Node color
+// shows through unmixed there.
+const ROUTE_ACCENT: Record<string, { color: [number, number, number]; mix: number }> = {
+  "/games": { color: [52 / 255, 199 / 255, 110 / 255], mix: 0.4 },
+  "/blog": { color: [56 / 255, 145 / 255, 255 / 255], mix: 0.4 },
+  "/media": { color: [214 / 255, 168 / 255, 68 / 255], mix: 0.4 },
 };
-const HOME_ACCENT = { color: [0.32, 0.5, 0.34] as [number, number, number], mix: 0, line: "140, 220, 150" };
+const HOME_ACCENT = { color: [0, 0, 0] as [number, number, number], mix: 0 };
 
 function accentForPath(pathname: string) {
   const base = "/" + (pathname.split("/")[1] ?? "");
   return ROUTE_ACCENT[base] ?? HOME_ACCENT;
+}
+
+const DENSITY_MULTIPLIER: Record<ParticleDensity, number> = { off: 0, low: 0.45, standard: 1, high: 1.85 };
+
+// Settings > Node color is one flat color; the particles need a dim ambient
+// tone and a brighter "lit up near the cursor" tone, so the highlight is the
+// color as-is and the base is a dimmed version of it - same ~0.55 ratio the
+// original hardcoded base/highlight pair used.
+function nodeColors(nodeColor: string) {
+  const highlight = new THREE.Color(...colorToUnitRgb(nodeColor));
+  const base = highlight.clone().multiplyScalar(0.55);
+  return { base, highlight };
 }
 
 function easeInOutCubic(x: number) {
@@ -143,6 +165,15 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     [diveTo, burstAt, getPointer, emitDust],
   );
 
+  // Reactive (unlike the other settings, read imperatively per-frame below)
+  // because changing the ambient particle count means rebuilding the
+  // geometry buffers, which only happens by re-running the mount effect.
+  const particleDensity = useSyncExternalStore(
+    subscribeSettings,
+    () => getSettingsSnapshot().particleDensity,
+    () => getServerSettingsSnapshot().particleDensity,
+  );
+
   useEffect(() => {
     pathnameRef.current = pathname;
   }, [pathname]);
@@ -176,7 +207,9 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     renderer.setSize(width, height);
     mount.appendChild(renderer.domElement);
 
-    const BASE_COUNT = Math.min(220, Math.max(90, Math.floor((width * height) / 9000)));
+    const BASE_COUNT = Math.round(
+      Math.min(220, Math.max(90, Math.floor((width * height) / 9000))) * DENSITY_MULTIPLIER[particleDensity],
+    );
     const TOTAL = BASE_COUNT + SPAWN_POOL;
 
     const positions = new Float32Array(TOTAL * 3);
@@ -220,11 +253,12 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     geometry.setAttribute("aBirth", new THREE.BufferAttribute(births, 1));
     geometry.setAttribute("aHighlight", new THREE.BufferAttribute(highlights, 1));
 
+    const initialNodeColors = nodeColors(getSettingsSnapshot().nodeColor);
     const material = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uBaseColor: { value: new THREE.Color(0.32, 0.5, 0.34) },
-        uHighlightColor: { value: new THREE.Color(0.56, 1.0, 0.6) },
+        uBaseColor: { value: initialNodeColors.base },
+        uHighlightColor: { value: initialNodeColors.highlight },
         uAccent: { value: new THREE.Color(...accentForPath(pathnameRef.current).color) },
         uAccentMix: { value: accentForPath(pathnameRef.current).mix },
       },
@@ -238,7 +272,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     scene.add(points);
 
     let currentAccentMix = accentForPath(pathnameRef.current).mix;
-    let currentLineAccent = accentForPath(pathnameRef.current).line;
+    // The cursor's own color (its molecule, the lines it draws, its dust
+    // trail) - a flat user preference (Settings > Cursor color), independent
+    // of route.
+    let currentCursorColor = getSettingsSnapshot().cursorColor;
 
     const timer = new THREE.Timer();
     const targetCam = { x: 0, y: 0 };
@@ -370,8 +407,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     const TARGETS_REFRESH_INTERVAL = 0.25;
 
     // Lets other elements (a hovered letter) borrow the exact same subtle
-    // motes as the cursor's own trail, instead of a separate effect.
+    // motes as the cursor's own trail, instead of a separate effect. Settings
+    // > Cursor trail gates this the same as the cursor's own wake below.
     const emitDust = (x: number, y: number, count: number) => {
+      if (!getSettingsSnapshot().trailEffect) return;
       for (let n = 0; n < count; n++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 3 + Math.random() * 8;
@@ -407,9 +446,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       }
       diveAim = { x: ndcX, y: ndcY };
       pendingDiveTarget = href;
+      const reducedMotion = getSettingsSnapshot().reducedMotion;
       dive = {
         startTime: timer.getElapsed(),
-        duration: 1.6,
+        duration: reducedMotion ? 0.35 : 1.6,
         fromZ: camera.position.z,
         toZ: depthForPath(href),
         href,
@@ -419,7 +459,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         arrivalBurstFired: false,
       };
       // The page you're leaving dissolves into this burst.
-      burstParticles(clientX, clientY, DIVE_BURST_COUNT);
+      burstParticles(clientX, clientY, reducedMotion ? Math.round(DIVE_BURST_COUNT * 0.3) : DIVE_BURST_COUNT);
     };
 
     burstAtImplRef.current = (x: number, y: number, count = ENTITY_BURST_COUNT) => {
@@ -494,8 +534,8 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         const size = (2.2 + orb.depth * 1.4) * pulse;
         const alpha = 0.1 + orb.depth * 0.14;
         const glow = lineCtx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, size * 2.4);
-        glow.addColorStop(0, `rgba(${currentLineAccent}, ${alpha.toFixed(3)})`);
-        glow.addColorStop(1, `rgba(${currentLineAccent}, 0)`);
+        glow.addColorStop(0, `rgba(${currentCursorColor}, ${alpha.toFixed(3)})`);
+        glow.addColorStop(1, `rgba(${currentCursorColor}, 0)`);
         lineCtx.fillStyle = glow;
         lineCtx.beginPath();
         lineCtx.arc(orb.x, orb.y, size * 2.4, 0, Math.PI * 2);
@@ -509,8 +549,8 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
 
       const coreSize = 7 * pulse;
       const coreGlow = lineCtx.createRadialGradient(0, 0, 0, 0, 0, coreSize * 1.8);
-      coreGlow.addColorStop(0, `rgba(${currentLineAccent}, 0.4)`);
-      coreGlow.addColorStop(1, `rgba(${currentLineAccent}, 0)`);
+      coreGlow.addColorStop(0, `rgba(${currentCursorColor}, 0.4)`);
+      coreGlow.addColorStop(1, `rgba(${currentCursorColor}, 0)`);
       lineCtx.fillStyle = coreGlow;
       lineCtx.beginPath();
       lineCtx.arc(0, 0, coreSize * 1.8, 0, Math.PI * 2);
@@ -529,6 +569,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       const t = timer.getElapsed();
       const dt = timer.getDelta();
       material.uniforms.uTime.value = t;
+      const { reducedMotion, trailEffect, cursorColor, nodeColor } = getSettingsSnapshot();
 
       if (pathnameRef.current !== lastPath) {
         const newPath = pathnameRef.current;
@@ -539,7 +580,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
           dive = null;
           diveAim = null;
           pendingDiveTarget = null;
-          settle = { startTime: t, duration: 0.9, fromZ: camera.position.z, toZ: depthForPath(newPath) };
+          settle = { startTime: t, duration: reducedMotion ? 0.2 : 0.9, fromZ: camera.position.z, toZ: depthForPath(newPath) };
         }
       }
 
@@ -571,15 +612,19 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       if (activeDirty) (geometry.attributes.aActive as THREE.BufferAttribute).needsUpdate = true;
       posAttr.needsUpdate = true;
 
-      points.rotation.y = t * 0.025;
-      points.rotation.x = Math.sin(t * 0.05) * 0.05;
+      points.rotation.y = t * (reducedMotion ? 0.006 : 0.025);
+      points.rotation.x = reducedMotion ? 0 : Math.sin(t * 0.05) * 0.05;
 
       const targetAccent = accentForPath(pathnameRef.current);
       const uAccent = material.uniforms.uAccent.value as THREE.Color;
       uAccent.lerp(new THREE.Color(...targetAccent.color), 0.04);
       currentAccentMix += (targetAccent.mix - currentAccentMix) * 0.04;
       material.uniforms.uAccentMix.value = currentAccentMix;
-      currentLineAccent = targetAccent.line;
+      currentCursorColor = cursorColor;
+
+      const targetNodeColors = nodeColors(nodeColor);
+      (material.uniforms.uBaseColor.value as THREE.Color).lerp(targetNodeColors.base, 0.04);
+      (material.uniforms.uHighlightColor.value as THREE.Color).lerp(targetNodeColors.highlight, 0.04);
 
       // Drives the DOM content's fade directly off dive/settle progress
       // instead of a fixed-duration CSS transition, so the page visibly
@@ -644,7 +689,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       const m = mouse.current;
 
       if (m) {
-        if (lastTrailMouse) {
+        if (lastTrailMouse && trailEffect) {
           const dx = m.x - lastTrailMouse.x;
           const dy = m.y - lastTrailMouse.y;
           const dist = Math.hypot(dx, dy);
@@ -754,7 +799,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
             lineCtx.beginPath();
             lineCtx.moveTo(m.x, m.y);
             lineCtx.lineTo(sx, sy);
-            lineCtx.strokeStyle = `rgba(${currentLineAccent}, ${proximity * 0.5})`;
+            lineCtx.strokeStyle = `rgba(${currentCursorColor}, ${proximity * 0.5})`;
             lineCtx.lineWidth = 1;
             lineCtx.stroke();
           }
@@ -805,7 +850,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         // A plain small fill reads as a discrete particle; a soft gradient
         // at this alpha just smears into a haze.
         lineCtx.beginPath();
-        lineCtx.fillStyle = `rgba(${currentLineAccent}, ${alpha.toFixed(3)})`;
+        lineCtx.fillStyle = `rgba(${currentCursorColor}, ${alpha.toFixed(3)})`;
         lineCtx.arc(dot.x, dot.y, size, 0, Math.PI * 2);
         lineCtx.fill();
       }
@@ -827,7 +872,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       material.dispose();
       mount.removeChild(renderer.domElement);
     };
-  }, [router]);
+  }, [router, particleDensity]);
 
   return (
     <SceneContext.Provider value={contextValue}>

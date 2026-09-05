@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
 import { useSceneTransition } from "@/components/scene/scene-context";
+import { getSettingsSnapshot } from "@/lib/settings";
 
 const WORD = "TECHNATURE";
 const LETTERS = WORD.split("");
@@ -157,6 +158,15 @@ export default function HomeButton() {
       const dt = Math.min((now - last) / 1000, 1 / 30);
       last = now;
 
+      const { accent, reducedMotion } = getSettingsSnapshot();
+      const [ar, ag, ab] = accent.split(",").map((n) => parseInt(n.trim(), 10) || 0);
+      // A pale, mostly-white version of the accent — the letters' fully
+      // hovered-in color, same "white tinted by the accent" look regardless
+      // of which color is picked.
+      const pr = Math.round(255 + (ar - 255) * 0.22);
+      const pg = Math.round(255 + (ag - 255) * 0.22);
+      const pb = Math.round(255 + (ab - 255) * 0.22);
+
       const hoverRate = hoveredRef.current ? HOVER_IN_RATE : HOVER_OUT_RATE;
       hoverAmountRef.current +=
         ((hoveredRef.current ? 1 : 0) - hoverAmountRef.current) * (1 - Math.exp(-hoverRate * dt));
@@ -165,9 +175,11 @@ export default function HomeButton() {
       const bodies = bodiesRef.current;
       for (let i = 0; i < bodies.length; i++) {
         const b = bodies[i];
-        const wanderPhase = Math.floor(now / 900) + i * 7;
-        b.vx += (seeded(wanderPhase, 40) - 0.5) * 8 * dt;
-        b.vy += (seeded(wanderPhase, 50) - 0.5) * 8 * dt;
+        if (!reducedMotion) {
+          const wanderPhase = Math.floor(now / 900) + i * 7;
+          b.vx += (seeded(wanderPhase, 40) - 0.5) * 8 * dt;
+          b.vy += (seeded(wanderPhase, 50) - 0.5) * 8 * dt;
+        }
         const speed = Math.hypot(b.vx, b.vy);
         if (speed > MAX_SPEED) {
           b.vx = (b.vx / speed) * MAX_SPEED;
@@ -215,15 +227,16 @@ export default function HomeButton() {
           el.style.transform = `translate(${(fx - half).toFixed(1)}px, ${(fy - half).toFixed(1)}px)`;
         }
 
-        const r = Math.round(255 + (234 - 255) * hoverT);
-        const g = 255;
-        const bch = Math.round(255 + (240 - 255) * hoverT);
+        const r = Math.round(255 + (pr - 255) * hoverT);
+        const g = Math.round(255 + (pg - 255) * hoverT);
+        const bch = Math.round(255 + (pb - 255) * hoverT);
         const alpha = (0.7 + 0.3 * hoverT).toFixed(2);
         el.style.color = `rgba(${r}, ${g}, ${bch}, ${alpha})`;
         el.style.textShadow =
           hoverT > 0.01
-            ? `0 0 ${(10 * hoverT).toFixed(1)}px rgba(120, 255, 150, ${(0.85 * hoverT).toFixed(2)}), 0 0 ${(24 * hoverT).toFixed(1)}px rgba(80, 220, 120, ${(0.5 * hoverT).toFixed(2)})`
+            ? `0 0 ${(10 * hoverT).toFixed(1)}px rgba(${accent}, ${(0.85 * hoverT).toFixed(2)}), 0 0 ${(24 * hoverT).toFixed(1)}px rgba(${accent}, ${(0.5 * hoverT).toFixed(2)})`
             : "none";
+        el.dataset.accent = accent;
       }
 
       rafId = requestAnimationFrame(tick);

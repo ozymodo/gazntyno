@@ -10,12 +10,24 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-source-serif);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  /* ApplySettings points --font-active at whichever of the vars above the
+     user picked in Settings; sans is the default until then. */
+  font-family: var(--font-active, var(--font-sans)), Arial, Helvetica, sans-serif;
+}
+
+/* Settings > Reduced motion: mutes the ambient CSS-driven animations (the
+   nav orbs' breathing glow and drift). The 3D scene's own dive/wander
+   animations read the same preference directly in SceneProvider/HomeButton/
+   HomeContent, since those are driven from JS, not CSS. */
+:root[data-reduced-motion="true"] .animate-breathe,
+:root[data-reduced-motion="true"] .animate-orb {
+  animation: none !important;
 }
 
 /* The 3D scene draws its own atom-like cursor on the particle canvas, so the
