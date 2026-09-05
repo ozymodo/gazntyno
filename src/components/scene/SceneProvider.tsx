@@ -209,9 +209,10 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
     enterFreeroamImplRef.current();
   }, []);
   const getPointer = useCallback(() => mouse.current, []);
+  const [utilityVisible, setUtilityVisible] = useState(true);
   const contextValue = useMemo<SceneContextValue>(
-    () => ({ diveTo, burstAt, getPointer, emitDust, enterFreeroam }),
-    [diveTo, burstAt, getPointer, emitDust, enterFreeroam],
+    () => ({ diveTo, burstAt, getPointer, emitDust, enterFreeroam, setUtilityVisible }),
+    [diveTo, burstAt, getPointer, emitDust, enterFreeroam, setUtilityVisible],
   );
 
   // Drives the freeroam HUD (crosshair + hint text), which lives outside the
@@ -1323,7 +1324,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
             view. */}
         <div ref={contentRef} className="relative z-10" style={{ opacity: 1, transformStyle: "preserve-3d" }}>
           {pathname !== "/" && <HomeButton />}
-          <UtilityButton />
+          <UtilityButton hidden={!utilityVisible} />
           {children}
         </div>
       </LayoutGroup>

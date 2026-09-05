@@ -26,11 +26,18 @@ function isPlainLeftClick(e: MouseEvent) {
   return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 }
 
-export default function UtilityButton() {
+export default function UtilityButton({ hidden = false }: { hidden?: boolean }) {
   const { diveTo } = useSceneTransition();
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // A page hiding this (a post/media viewer or editor covering the screen)
+  // should also close any open submenu, so it doesn't reappear already open
+  // the moment the button fades back in.
+  useEffect(() => {
+    if (hidden) setOpen(false);
+  }, [hidden]);
 
   const clearCloseTimer = () => {
     if (closeTimer.current) {
@@ -73,7 +80,9 @@ export default function UtilityButton() {
   return (
     <div
       ref={containerRef}
-      className="fixed right-6 top-6 z-20 flex flex-col items-end gap-3"
+      className={`fixed right-6 top-6 z-20 flex flex-col items-end gap-3 transition-opacity duration-300 ${
+        hidden ? "pointer-events-none opacity-0" : "opacity-100"
+      }`}
       onMouseEnter={openMenu}
       onMouseLeave={scheduleClose}
       onFocus={openMenu}
