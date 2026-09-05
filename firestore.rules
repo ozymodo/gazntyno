@@ -6,7 +6,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner() {
-      return request.auth != null && request.auth.uid == "REPLACE_WITH_YOUR_OWNER_UID";
+      return request.auth != null && request.auth.uid == "xYI8ZGJYrveGl7Iv4MqMnbt0rZ63";
     }
 
     match /posts/{postId} {
