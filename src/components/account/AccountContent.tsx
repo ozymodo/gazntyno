@@ -25,7 +25,15 @@ const ACCENT = "210, 180, 220";
 const SAVE_DEBOUNCE_MS = 500;
 
 const STAT_LABELS: {
-  key: "posts" | "mediaAdded" | "mediaViewed" | "pagesVisited" | "minutesPlayed" | "nodesCreated";
+  key:
+    | "posts"
+    | "mediaAdded"
+    | "mediaViewed"
+    | "pagesVisited"
+    | "minutesPlayed"
+    | "nodesCreated"
+    | "settingsChanged"
+    | "particlesCaught";
   label: string;
 }[] = [
   { key: "posts", label: "Posts" },
@@ -34,6 +42,8 @@ const STAT_LABELS: {
   { key: "pagesVisited", label: "Pages visited" },
   { key: "minutesPlayed", label: "Minutes in Microbyte" },
   { key: "nodesCreated", label: "Nodes created" },
+  { key: "settingsChanged", label: "Settings tweaked" },
+  { key: "particlesCaught", label: "Particles caught" },
 ];
 
 export default function AccountContent() {
@@ -221,7 +231,8 @@ export default function AccountContent() {
               />
             </div>
             <p className="text-xs text-white/35">
-              Earn XP by exploring the site, posting, viewing media, and playing Microbyte.
+              Earn XP by exploring the site, posting, viewing media, playing Microbyte, tuning your settings, and
+              catching the fleeing particle on the homepage.
             </p>
           </div>
 

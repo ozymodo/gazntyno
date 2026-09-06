@@ -1,3 +1,5 @@
+import { awardSettingsChangeXp } from "@/lib/account";
+
 export type ColorPreset = {
   label: string;
   color: string;
@@ -67,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Matches Tailwind's emerald-200 at 40% - the gradient's original fixed
   // end color, kept as the default so nothing looks different out of the box.
   wordmarkColor: "167, 243, 208",
-  wordmarkSize: 1.4,
+  wordmarkSize: 1,
   wordmarkWeight: 200,
 };
 
@@ -179,6 +181,10 @@ export function updateSettings(partial: Partial<Settings>) {
   cache = sanitize({ ...cache, ...partial });
   if (typeof window !== "undefined") {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+    // Trying out a color/font/toggle/etc. earns a little XP - rate-limited
+    // in awardSettingsChangeXp itself, so clicking through several presets
+    // earns a few hits rather than none after the first.
+    awardSettingsChangeXp();
   }
   emit();
 }

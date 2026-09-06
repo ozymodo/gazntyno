@@ -9,6 +9,8 @@ export type AccountStats = {
   pagesVisited: number;
   minutesPlayed: number;
   nodesCreated: number;
+  settingsChanged: number;
+  particlesCaught: number;
 };
 
 export type Account = {
@@ -51,6 +53,8 @@ const DEFAULT_STATS: AccountStats = {
   pagesVisited: 0,
   minutesPlayed: 0,
   nodesCreated: 0,
+  settingsChanged: 0,
+  particlesCaught: 0,
 };
 
 const DEFAULT_ACCOUNT: Account = {
@@ -101,6 +105,8 @@ function sanitize(raw: unknown): PersistedFields {
       pagesVisited: typeof stats.pagesVisited === "number" ? stats.pagesVisited : DEFAULT_STATS.pagesVisited,
       minutesPlayed: typeof stats.minutesPlayed === "number" ? stats.minutesPlayed : DEFAULT_STATS.minutesPlayed,
       nodesCreated: typeof stats.nodesCreated === "number" ? stats.nodesCreated : DEFAULT_STATS.nodesCreated,
+      settingsChanged: typeof stats.settingsChanged === "number" ? stats.settingsChanged : DEFAULT_STATS.settingsChanged,
+      particlesCaught: typeof stats.particlesCaught === "number" ? stats.particlesCaught : DEFAULT_STATS.particlesCaught,
     },
   };
 }
@@ -275,6 +281,22 @@ export function awardMediaViewXp(id: string) {
 
 export function awardMicrobyteMinute() {
   awardXp(5, "microbyte-minute", 50_000, (s) => ({ ...s, minutesPlayed: s.minutesPlayed + 1 }));
+}
+
+// Short cooldown (vs. e.g. a blog post's 3s) so clicking through several
+// color presets or toggles in one sitting - "trying out configurations" -
+// earns a few small hits of XP rather than just the first change, while
+// still shutting out spamming one control back and forth.
+export function awardSettingsChangeXp() {
+  awardXp(5, "settings-change", 4_000, (s) => ({ ...s, settingsChanged: s.settingsChanged + 1 }));
+}
+
+// The homepage's fleeing-particle mini-game: satisfying but not trivial to
+// land (it's actively evading the cursor), so it pays out more than a
+// typical rate-limited action. Its own cooldown here is just a backstop -
+// SceneProvider already paces catches naturally via the respawn timer.
+export function awardParticleCatchXp() {
+  awardXp(15, "particle-catch", 3_000, (s) => ({ ...s, particlesCaught: s.particlesCaught + 1 }));
 }
 
 // Clicking to create a node is cheap enough to spam, so unlike the other

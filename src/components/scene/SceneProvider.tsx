@@ -11,6 +11,7 @@ import { SceneContext, type SceneContextValue } from "@/components/scene/scene-c
 import {
   awardGateXp,
   awardNavigationXp,
+  awardParticleCatchXp,
   getAccountSnapshot,
   getServerAccountSnapshot,
   levelProgress,
@@ -123,6 +124,51 @@ const GATE_TRIGGER_RADIUS = 34; // world units - how close the camera must get t
 const GATE_REACH = 320; // screen px - how far out its crosshair line reaches
 const GATE_COOLDOWN = 2; // seconds - just a debounce against double-counting one pass
 const GATE_MIN_RESPAWN_DISTANCE = 260; // world units - respawns at least this far from wherever it was scored
+
+// Homepage mini-game: a small bright "prey" particle that flees the cursor -
+// catching it bursts like the site's other particle events and awards XP.
+// Screen-space (2D, drawn on the line canvas), not part of the 3D ambient
+// field, so it only ever needs simple px-distance math. Only active on "/",
+// where there's open space for it and it won't compete with a page's actual
+// content.
+const PREY_CORE_RADIUS = 7; // px - visual core size
+const PREY_CATCH_RADIUS = 28; // px - generous hit test, so landing it reads as rewarding, not fiddly
+const PREY_FLEE_REACH = 170; // px - cursor proximity that triggers fleeing
+const PREY_FLEE_ACCEL = 1100; // px/sec^2 while fleeing
+const PREY_MAX_SPEED = 460; // px/sec
+const PREY_DRAG = 2.2; // 1/sec - velocity decay so it settles instead of coasting forever
+const PREY_EDGE_MARGIN = 90; // px - keeps it off the very edge on the sides/bottom
+const PREY_TOP_MARGIN = 200; // px - taller top margin so it doesn't spawn under the hero wordmark
+const PREY_SPAWN_MIN_DELAY = 4; // seconds after a catch (or mount) before the next one appears
+const PREY_SPAWN_MAX_DELAY = 9; // seconds
+const PREY_BURST_COUNT = 90; // bigger than a normal entity burst (28) - a proper little explosion
+const PREY_ENTRY_SPEED = 260; // px/sec - the dash it flies in from off-screen with
+const PREY_ENTRY_OFFSCREEN_MARGIN = 140; // px beyond whichever edge it starts from, well clear of the visible canvas
+
+// A colorful, varied-brightness sparkle layer drawn on top of the shared 3D
+// burst specifically for a catch, so landing one reads as the biggest,
+// most rewarding burst on the site rather than just another dive/entity
+// dissolve. Plain 2D canvas particles (not the shared GPU buffer), so each
+// one can freely get its own color/size/alpha instead of the one shared
+// node-color tint.
+const CATCH_SPARK_COUNT = 40;
+const CATCH_SPARK_PALETTE = [
+  "255, 210, 80", // gold
+  "255, 110, 180", // pink
+  "120, 220, 255", // cyan
+  "180, 130, 255", // violet
+  "140, 255, 170", // mint
+  "255, 150, 90", // orange
+];
+
+// A background-relative contrast color for the prey's core, so it reads
+// clearly no matter what the user picked for Settings > Background color -
+// the one thing it's guaranteed to be sitting on top of.
+function contrastToBackground(backgroundColor: string): string {
+  const [r, g, b] = backgroundColor.split(",").map((n) => parseInt(n.trim(), 10) || 0);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "10, 10, 10" : "255, 255, 255";
+}
 
 // Settings > Node color is one flat color; the particles need a dim ambient
 // tone and a brighter "lit up near the cursor" tone, so the highlight is the
@@ -551,6 +597,128 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       lookTouchMoved = false;
     };
 
+    // Homepage mini-game state - see the PREY_* constants above. `entering`
+    // is true only during its initial dash in from off-screen - once that
+    // lands it inside the safe zone, normal flee/bounce behavior takes over
+    // and it stays on-screen until caught.
+    type Prey = { x: number; y: number; vx: number; vy: number; entering: boolean };
+    let prey: Prey | null = null;
+    let nextPreySpawnAt = PREY_SPAWN_MIN_DELAY + Math.random() * (PREY_SPAWN_MAX_DELAY - PREY_SPAWN_MIN_DELAY);
+
+    const spawnPrey = () => {
+      const targetX = PREY_EDGE_MARGIN + Math.random() * (width - PREY_EDGE_MARGIN * 2);
+      const targetY = PREY_TOP_MARGIN + Math.random() * (height - PREY_TOP_MARGIN - PREY_EDGE_MARGIN);
+
+      // Starts just off one random edge of the screen and dashes toward a
+      // point inside the safe zone, so it reads as arriving from outside
+      // the frame instead of blinking into existence mid-screen.
+      const edge = Math.floor(Math.random() * 4);
+      let startX: number;
+      let startY: number;
+      if (edge === 0) {
+        startX = Math.random() * width;
+        startY = -PREY_ENTRY_OFFSCREEN_MARGIN;
+      } else if (edge === 1) {
+        startX = width + PREY_ENTRY_OFFSCREEN_MARGIN;
+        startY = Math.random() * height;
+      } else if (edge === 2) {
+        startX = Math.random() * width;
+        startY = height + PREY_ENTRY_OFFSCREEN_MARGIN;
+      } else {
+        startX = -PREY_ENTRY_OFFSCREEN_MARGIN;
+        startY = Math.random() * height;
+      }
+
+      const dx = targetX - startX;
+      const dy = targetY - startY;
+      const dist = Math.hypot(dx, dy) || 1;
+      prey = {
+        x: startX,
+        y: startY,
+        vx: (dx / dist) * PREY_ENTRY_SPEED,
+        vy: (dy / dist) * PREY_ENTRY_SPEED,
+        entering: true,
+      };
+    };
+
+    // Colorful sparkle layer for a catch - see CATCH_SPARK_* above. Plain
+    // radial scatter (matching the 3D burst's own dispersal) rather than
+    // gravity/confetti-fall, so it reads as part of the same "explosion of
+    // molecules" language, just brighter and more varied.
+    type CatchSpark = { x: number; y: number; vx: number; vy: number; color: string; size: number; born: number; life: number; peakAlpha: number };
+    const catchSparks: CatchSpark[] = [];
+
+    const spawnCatchSparks = (x: number, y: number) => {
+      for (let i = 0; i < CATCH_SPARK_COUNT; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 220;
+        catchSparks.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: CATCH_SPARK_PALETTE[Math.floor(Math.random() * CATCH_SPARK_PALETTE.length)],
+          size: 1.5 + Math.random() * 3,
+          born: timer.getElapsed(),
+          life: 0.6 + Math.random() * 0.7,
+          // Each spark gets its own peak brightness/transparency, so the
+          // burst reads as a scatter of distinct sparks rather than one
+          // uniform flash.
+          peakAlpha: 0.35 + Math.random() * 0.65,
+        });
+      }
+    };
+
+    // Bursts like any other entity event (a page dive, an opened post) and
+    // pays out XP - the respawn delay set here is the mini-game's whole
+    // pacing, so no separate per-catch cooldown is needed beyond the small
+    // backstop in awardParticleCatchXp itself.
+    const catchPrey = (x: number, y: number) => {
+      burstParticles(x, y, PREY_BURST_COUNT);
+      spawnCatchSparks(x, y);
+      awardParticleCatchXp();
+      prey = null;
+      nextPreySpawnAt = timer.getElapsed() + PREY_SPAWN_MIN_DELAY + Math.random() * (PREY_SPAWN_MAX_DELAY - PREY_SPAWN_MIN_DELAY);
+    };
+
+    const drawPrey = (p: Prey, t: number, coreColor: string) => {
+      const pulse = 0.85 + 0.15 * Math.sin(t * 3.2);
+      // A shimmering, constantly-shifting aura - the part that keeps this
+      // from ever visually blending into a static user color choice,
+      // whatever it happens to be.
+      const hue = (t * 70) % 360;
+      const auraColor = `hsl(${hue.toFixed(0)}, 90%, 65%)`;
+      const auraSize = (PREY_CORE_RADIUS + 10) * pulse;
+
+      const glow = lineCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, auraSize * 2.2);
+      glow.addColorStop(0, auraColor);
+      glow.addColorStop(1, "transparent");
+      lineCtx.globalAlpha = 0.5;
+      lineCtx.fillStyle = glow;
+      lineCtx.beginPath();
+      lineCtx.arc(p.x, p.y, auraSize * 2.2, 0, Math.PI * 2);
+      lineCtx.fill();
+      lineCtx.globalAlpha = 1;
+
+      // A couple of tiny orbiting motes - same "alive" language as the
+      // cursor's own molecule.
+      for (let k = 0; k < 2; k++) {
+        const angle = t * 2.4 + k * Math.PI;
+        const ox = p.x + Math.cos(angle) * (PREY_CORE_RADIUS + 6);
+        const oy = p.y + Math.sin(angle) * (PREY_CORE_RADIUS + 6) * 0.6;
+        lineCtx.beginPath();
+        lineCtx.fillStyle = auraColor;
+        lineCtx.arc(ox, oy, 2.2, 0, Math.PI * 2);
+        lineCtx.fill();
+      }
+
+      // Solid, background-contrasting core on top - always readable.
+      lineCtx.beginPath();
+      lineCtx.fillStyle = `rgb(${coreColor})`;
+      lineCtx.arc(p.x, p.y, PREY_CORE_RADIUS * pulse, 0, Math.PI * 2);
+      lineCtx.fill();
+    };
+
     // The particle or gate (if any) currently near enough to the crosshair
     // to lock onto - recomputed every frame in the tick loop below, consumed
     // when Enter is pressed. Particles carry their buffer index so the zoom
@@ -807,6 +975,14 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
         spawnNodeAtCrosshair();
         return;
       }
+      if (prey && pathnameRef.current === "/") {
+        const dx = e.clientX - prey.x;
+        const dy = e.clientY - prey.y;
+        if (Math.hypot(dx, dy) < PREY_CATCH_RADIUS) {
+          catchPrey(prey.x, prey.y);
+          return;
+        }
+      }
       spawnParticle(e.clientX, e.clientY);
       recordNodeCreated();
     };
@@ -948,7 +1124,7 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       const t = timer.getElapsed();
       const dt = timer.getDelta();
       material.uniforms.uTime.value = t;
-      const { reducedMotion, trailEffect, cursorColor, nodeColor } = getSettingsSnapshot();
+      const { reducedMotion, trailEffect, cursorColor, nodeColor, backgroundColor } = getSettingsSnapshot();
 
       if (pathnameRef.current !== lastPath) {
         const newPath = pathnameRef.current;
@@ -1160,6 +1336,94 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       const crosshair = { x: width / 2, y: height / 2 };
       const m = freeroam.active ? crosshair : freeroamReturn ? null : mouse.current;
       aimCandidate = null;
+
+      // Homepage mini-game: spawn/flee/draw the prey. Skipped entirely
+      // during freeroam/dives/settles, where the page itself is dissolved.
+      if (pathnameRef.current === "/" && !freeroam.active && !freeroamReturn && !dive && !settle) {
+        if (!prey && t > nextPreySpawnAt) spawnPrey();
+        if (prey) {
+          if (prey.entering) {
+            // A straight dash in from off-screen - no flee steering or
+            // edge-bounce yet, since both would fight the very entrance
+            // being animated. Ends the moment it crosses into the safe
+            // zone, at whatever speed it arrived with; the drag below then
+            // takes over next frame and settles it into an idle drift.
+            prey.x += prey.vx * dt;
+            prey.y += prey.vy * dt;
+            const insideX = prey.x >= PREY_EDGE_MARGIN && prey.x <= width - PREY_EDGE_MARGIN;
+            const insideY = prey.y >= PREY_TOP_MARGIN && prey.y <= height - PREY_EDGE_MARGIN;
+            if (insideX && insideY) prey.entering = false;
+          } else {
+            if (m) {
+              const dx = prey.x - m.x;
+              const dy = prey.y - m.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              if (dist < PREY_FLEE_REACH) {
+                const strength = 1 - dist / PREY_FLEE_REACH;
+                prey.vx += (dx / dist) * PREY_FLEE_ACCEL * strength * dt;
+                prey.vy += (dy / dist) * PREY_FLEE_ACCEL * strength * dt;
+              }
+            }
+            const dragFactor = Math.exp(-PREY_DRAG * dt);
+            prey.vx *= dragFactor;
+            prey.vy *= dragFactor;
+            const speed = Math.hypot(prey.vx, prey.vy);
+            if (speed > PREY_MAX_SPEED) {
+              prey.vx = (prey.vx / speed) * PREY_MAX_SPEED;
+              prey.vy = (prey.vy / speed) * PREY_MAX_SPEED;
+            }
+            prey.x += prey.vx * dt;
+            prey.y += prey.vy * dt;
+
+            // Bounces off its safe-zone bounds rather than hiding behind the
+            // wordmark or off the edge of the screen.
+            if (prey.x < PREY_EDGE_MARGIN) {
+              prey.x = PREY_EDGE_MARGIN;
+              prey.vx = Math.abs(prey.vx);
+            }
+            if (prey.x > width - PREY_EDGE_MARGIN) {
+              prey.x = width - PREY_EDGE_MARGIN;
+              prey.vx = -Math.abs(prey.vx);
+            }
+            if (prey.y < PREY_TOP_MARGIN) {
+              prey.y = PREY_TOP_MARGIN;
+              prey.vy = Math.abs(prey.vy);
+            }
+            if (prey.y > height - PREY_EDGE_MARGIN) {
+              prey.y = height - PREY_EDGE_MARGIN;
+              prey.vy = -Math.abs(prey.vy);
+            }
+          }
+
+          drawPrey(prey, t, contrastToBackground(backgroundColor));
+        }
+      }
+
+      // Colorful catch-sparkle layer - updated/drawn regardless of route so
+      // a catch made right as the player dives away still finishes its
+      // fade instead of being cut off.
+      for (let i = catchSparks.length - 1; i >= 0; i--) {
+        const spark = catchSparks[i];
+        const age = t - spark.born;
+        if (age >= spark.life) {
+          catchSparks.splice(i, 1);
+          continue;
+        }
+        const drag = Math.exp(-2.6 * dt);
+        spark.vx *= drag;
+        spark.vy *= drag;
+        spark.x += spark.vx * dt;
+        spark.y += spark.vy * dt;
+
+        const k = age / spark.life;
+        const alpha = spark.peakAlpha * (1 - k) * (1 - k);
+        if (alpha <= 0.01) continue;
+
+        lineCtx.beginPath();
+        lineCtx.fillStyle = `rgba(${spark.color}, ${alpha.toFixed(3)})`;
+        lineCtx.arc(spark.x, spark.y, spark.size, 0, Math.PI * 2);
+        lineCtx.fill();
+      }
 
       if (m) {
         if (lastTrailMouse && trailEffect && !freeroam.active) {
