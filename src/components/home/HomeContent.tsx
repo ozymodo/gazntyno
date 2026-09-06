@@ -98,12 +98,30 @@ export default function HomeContent() {
       last = now;
       const settledIn = now - mountTime > FLOAT_ENTRY_DELAY_MS;
 
+      // Font, color, and accent tint apply every frame from mount - only the
+      // float/repel transform below needs to wait for the incoming layoutId
+      // flight (from HomeButton) to finish, since that's the only thing that
+      // actually fights over the `transform` property. Gating these on the
+      // same delay as the physics made the wordmark visibly snap from its
+      // default bold/white look to the user's real font/weight/color a beat
+      // after every arrival at "/" - cheap-looking and unnecessary, since
+      // none of this touches transform.
+      const { accent, wordmarkFont, wordmarkColor, wordmarkWeight } = getSettingsSnapshot();
+      const wordmarkFontFamily = FONT_FAMILY_VAR[wordmarkFont];
+      for (let i = 0; i < wordmark.length; i++) {
+        const el = letterRefs.current[i];
+        if (!el) continue;
+        el.style.fontFamily = wordmarkFontFamily;
+        el.style.fontWeight = String(wordmarkWeight);
+        el.style.backgroundImage = `linear-gradient(to bottom, white, rgba(${wordmarkColor}, 0.4))`;
+        el.dataset.accent = accent;
+      }
+
       if (settledIn) {
         if (baseCenters.length === 0) measure();
         const t = now / 1000;
         const pointer = getPointer();
-        const { accent, reducedMotion, wordmarkFont, wordmarkColor, wordmarkWeight } = getSettingsSnapshot();
-        const wordmarkFontFamily = FONT_FAMILY_VAR[wordmarkFont];
+        const { reducedMotion } = getSettingsSnapshot();
 
         for (let i = 0; i < wordmark.length; i++) {
           const el = letterRefs.current[i];
@@ -142,14 +160,6 @@ export default function HomeContent() {
           el.style.transform = `translate(${(floatX + repelX).toFixed(2)}px, ${(floatY + repelY).toFixed(2)}px) scale(${(1 + glow * 0.06).toFixed(3)})`;
           el.style.filter =
             glow > 0.02 ? `drop-shadow(0 0 ${(4 + glow * 9).toFixed(1)}px rgba(${accent}, ${(glow * 0.55).toFixed(2)}))` : "";
-          el.dataset.accent = accent;
-
-          // Settings > (landing page title): font/color/weight for the
-          // wordmark specifically - the white-to-color gradient replaces the
-          // fixed white-to-emerald one via the same bg-clip-text trick.
-          el.style.fontFamily = wordmarkFontFamily;
-          el.style.fontWeight = String(wordmarkWeight);
-          el.style.backgroundImage = `linear-gradient(to bottom, white, rgba(${wordmarkColor}, 0.4))`;
 
           if (glow > DUST_THRESHOLD && now - lastDustAt[i] > DUST_INTERVAL_MS) {
             lastDustAt[i] = now;
