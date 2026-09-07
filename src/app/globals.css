@@ -16,6 +16,13 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  /* The site is styled all-lowercase. Doing it here rather than in the
+     copy itself covers everything uniformly - including text nobody wrote
+     into the source: blog posts, usernames, bios, media captions. Note this
+     is display-only; the underlying strings (and anything copied out of the
+     page) keep the case they were written in. Route metadata is out of CSS's
+     reach, so those titles/descriptions are lowercase at the source instead. */
+  text-transform: lowercase;
   /* ApplySettings points --font-active at whichever of the vars above the
      user picked in Settings; sans is the default until then. */
   font-family: var(--font-active, var(--font-sans)), Arial, Helvetica, sans-serif;
@@ -142,4 +149,14 @@ body {
     pulse-glow var(--orb-breathe-duration, 6.5s) ease-in-out infinite,
     drift var(--orb-drift-duration, 9s) ease-in-out infinite;
   animation-delay: var(--orb-breathe-delay, 0s), var(--orb-drift-delay, 0s);
+}
+
+/* Form controls opt out: a field has to show what was actually typed, or
+   the value silently disagrees with the display (an email mid-entry, a
+   username with deliberate capitals). Their own labels and the surrounding
+   copy still lowercase normally. */
+input,
+textarea,
+select {
+  text-transform: none;
 }

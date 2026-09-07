@@ -50,7 +50,7 @@ export default function AccountBadge() {
       <div className="flex flex-col items-start gap-1">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-medium text-white/85">{account.username || "Anonymous"}</span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">Lv {level}</span>
+          <span className="text-[10px] font-medium tracking-wide text-white/40">Lv {level}</span>
         </div>
         <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
           <div

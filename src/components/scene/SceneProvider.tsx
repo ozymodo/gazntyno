@@ -1692,25 +1692,25 @@ export default function SceneProvider({ children }: { children: React.ReactNode 
       {freeroamActive && (
         <div className="pointer-events-none fixed inset-0 z-30">
           <div className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/50" />
-          <p className="absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/60">
+          <p className="absolute left-1/2 top-6 -translate-x-1/2 whitespace-nowrap text-xs tracking-[0.3em] text-white/60">
             Lv {level} · {xp.toLocaleString()} XP
           </p>
           {isCoarsePointer ? (
             <>
-              <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-xs uppercase tracking-[0.3em] text-white/40">
+              <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-xs tracking-[0.3em] text-white/40">
                 Joystick to move · Drag to look · Tap to drop a node
               </p>
               <FreeroamJoystick onMove={(x, z) => { freeroamMove.current = { x, z }; }} />
               <button
                 type="button"
                 onClick={() => exitFreeroamImplRef.current()}
-                className="pointer-events-auto fixed right-8 top-6 z-30 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-white/70 backdrop-blur-md transition-colors hover:border-white/30 hover:text-white"
+                className="pointer-events-auto fixed right-8 top-6 z-30 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs tracking-[0.2em] text-white/70 backdrop-blur-md transition-colors hover:border-white/30 hover:text-white"
               >
                 Exit
               </button>
             </>
           ) : (
-            <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs uppercase tracking-[0.3em] text-white/40">
+            <p className="absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs tracking-[0.3em] text-white/40">
               WASD to move · Shift to sprint · Space to dash · Enter to lock on · Esc to return
             </p>
           )}

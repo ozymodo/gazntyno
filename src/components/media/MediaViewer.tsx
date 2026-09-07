@@ -75,7 +75,7 @@ export default function MediaViewer({
         <p className="mt-5 text-base leading-relaxed text-white/80">
           {item.caption || <span className="italic text-white/30">No caption</span>}
         </p>
-        <p className="mt-2 text-xs uppercase tracking-widest text-white/30">
+        <p className="mt-2 text-xs tracking-widest text-white/30">
           {dateFormatter.format(item.createdAt)}
           {item.updatedAt !== item.createdAt && <> · edited {dateFormatter.format(item.updatedAt)}</>}
         </p>

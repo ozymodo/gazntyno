@@ -64,7 +64,7 @@ export default function PostViewer({
         </button>
 
         <h1 className="pr-8 text-2xl font-semibold leading-snug text-white/90 sm:text-3xl">{post.title}</h1>
-        <p className="mt-2 text-xs uppercase tracking-widest text-white/30">
+        <p className="mt-2 text-xs tracking-widest text-white/30">
           {dateFormatter.format(post.createdAt)}
           {post.updatedAt !== post.createdAt && <> · edited {dateFormatter.format(post.updatedAt)}</>}
         </p>

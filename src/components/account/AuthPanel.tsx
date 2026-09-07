@@ -95,7 +95,7 @@ export default function AuthPanel() {
             Continue with Google
           </button>
 
-          <div className="flex items-center gap-3 py-1 text-[10px] uppercase tracking-widest text-white/25">
+          <div className="flex items-center gap-3 py-1 text-[10px] tracking-widest text-white/25">
             <div className="h-px flex-1 bg-white/10" />
             or
             <div className="h-px flex-1 bg-white/10" />

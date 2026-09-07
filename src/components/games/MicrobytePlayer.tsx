@@ -79,7 +79,7 @@ export default function MicrobytePlayer() {
         <Link href="/games" className="text-sm text-white/40 transition-colors hover:text-white/80">
           ← Back to Games
         </Link>
-        <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-widest text-emerald-300">
+        <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs tracking-widest text-emerald-300">
           Indie
         </span>
       </div>
