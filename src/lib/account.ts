@@ -16,7 +16,7 @@ export type AccountStats = {
 export type Account = {
   username: string;
   bio: string;
-  /** Custom text for the animated landing-page title/nav wordmark, in place of the site default. Empty string falls back to DEFAULT_WORDMARK wherever it's rendered. */
+  /** Custom text for the animated landing-page title/nav wordmark, in place of the site default. Empty string falls back to lib/wordmark's per-load random word wherever it's rendered. */
   wordmark: string;
   xp: number;
   stats: AccountStats;
@@ -24,18 +24,19 @@ export type Account = {
   pictureUrl: string | null;
 };
 
-/** The site's out-of-the-box wordmark text, used whenever an account has no custom one set. */
-export const DEFAULT_WORDMARK = "GAZNTYNO";
 // Keeps the animated letters (physics-simulated in HomeButton, cursor-repelled
 // in HomeContent) from growing wide enough to look broken or collide with
-// other fixed-position UI - comfortably more than the default's 8 letters.
+// other fixed-position UI - comfortably more than the 6-8 letters of the
+// default words in lib/wordmark.ts.
 export const WORDMARK_MAX_LENGTH = 16;
 
 export function usernameInitials(username: string): string {
   const trimmed = username.trim();
   if (!trimmed) return "?";
   const parts = trimmed.split(/\s+/);
-  return parts.length === 1 ? trimmed.slice(0, 2).toUpperCase() : (parts[0][0] + parts[1][0]).toUpperCase();
+  // Lowercased to match the site's all-lowercase styling, so the returned
+  // string reads the same as what the avatar actually renders.
+  return parts.length === 1 ? trimmed.slice(0, 2).toLowerCase() : (parts[0][0] + parts[1][0]).toLowerCase();
 }
 
 export type LevelProgress = {
@@ -66,7 +67,10 @@ const DEFAULT_ACCOUNT: Account = {
   pictureUrl: null,
 };
 
-const STORAGE_KEY = "technature.account";
+const STORAGE_KEY = "zyme.account";
+// The key this used before the project was renamed to zyme. Read as a
+// fallback (never written) so a guest's existing profile and XP carry over.
+const LEGACY_STORAGE_KEY = "technature.account";
 // Cooldowns for awardXp's rate-limiting, kept separate from the persisted
 // profile/xp record - losing these on reload just means a fresh grace period,
 // not lost progress.
@@ -114,7 +118,7 @@ function sanitize(raw: unknown): PersistedFields {
 function readFromStorage(): PersistedFields {
   if (typeof window === "undefined") return DEFAULT_ACCOUNT;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return DEFAULT_ACCOUNT;
     return sanitize(JSON.parse(raw));
   } catch {

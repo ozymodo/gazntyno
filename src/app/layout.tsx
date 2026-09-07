@@ -20,8 +20,8 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "gazntyno",
-  description: "Games, blog posts, and media, all in one living space.",
+  title: "zyme",
+  description: "games, blog posts, and media, all in one living space.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

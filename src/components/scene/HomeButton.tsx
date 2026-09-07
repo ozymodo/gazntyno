@@ -4,13 +4,14 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { DEFAULT_WORDMARK, getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
+import { getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
+import { getDefaultWordmark, getServerDefaultWordmark, subscribeDefaultWordmark } from "@/lib/wordmark";
 import { useSceneTransition } from "@/components/scene/scene-context";
 import { FONT_FAMILY_VAR, getSettingsSnapshot } from "@/lib/settings";
 
 // Matches HomeContent's layoutId/transition exactly, so the hero title and
 // this button read as the same letters flying between pages. Both read the
-// same Account > Homepage text, falling back to DEFAULT_WORDMARK when unset.
+// same Account > Homepage text, falling back to the same per-load random word when unset.
 const LETTER_TRANSITION = { layout: { duration: 0.9, ease: [0.16, 1, 0.3, 1] as const } };
 // While the letters are still mid-flight from the hero title (the shared
 // layoutId transition owns their transform), the physics loop below must
@@ -91,7 +92,8 @@ function shuffleAwake(bodies: Body[]) {
 export default function HomeButton() {
   const { diveTo } = useSceneTransition();
   const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot, getServerAccountSnapshot);
-  const wordmarkText = account.wordmark || DEFAULT_WORDMARK;
+  const defaultWordmark = useSyncExternalStore(subscribeDefaultWordmark, getDefaultWordmark, getServerDefaultWordmark);
+  const wordmarkText = account.wordmark || defaultWordmark;
   // Split by code point (not raw .split("")), so a custom wordmark with a
   // multi-byte character doesn't get sliced into broken halves.
   const letters = useMemo(() => Array.from(wordmarkText), [wordmarkText]);

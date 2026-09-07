@@ -12,7 +12,7 @@ export type Settings = {
   /** "r, g, b" - the site's base background color, behind the particle scene. */
   backgroundColor: string;
   /** "r, g, b" (0-255 each) - matches the `data-accent`/`rgba(${accent}, a)` format already used across the scene.
-   *  Colors only the TECHNATURE wordmark/logo and the home nav button. */
+   *  Colors only the wordmark/logo and the home nav button. */
   accent: string;
   /** The ambient particle field's own color (its base tone and the brighter "lit up" version near the cursor). */
   nodeColor: string;
@@ -23,7 +23,7 @@ export type Settings = {
   reducedMotion: boolean;
   /** Site-wide body font. */
   font: FontChoice;
-  /** The following four control only the "TECHNATURE" wordmark on the landing page. */
+  /** The following four control only the wordmark on the landing page. */
   wordmarkFont: FontChoice;
   /** "r, g, b" - the letters shade from white down into this color, replacing the fixed white-to-emerald gradient. */
   wordmarkColor: string;
@@ -90,7 +90,11 @@ function sanitizeColor(v: unknown, fallback: string): string {
   return typeof v === "string" && RGB_PATTERN.test(v) ? v : fallback;
 }
 
-const STORAGE_KEY = "technature.settings";
+const STORAGE_KEY = "zyme.settings";
+// The key this used before the project was renamed to zyme. Read as a
+// fallback (never written) so a returning visitor keeps their tuned settings
+// instead of silently reverting to the defaults.
+const LEGACY_STORAGE_KEY = "technature.settings";
 
 // Same tiny external-store shape as blog.ts/media.ts: a module-level cache so
 // every reader (React components via useSyncExternalStore, and imperative
@@ -135,7 +139,7 @@ function sanitize(raw: unknown): Settings {
 function readFromStorage(): Settings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     return sanitize(JSON.parse(raw));
   } catch {

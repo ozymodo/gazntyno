@@ -176,7 +176,7 @@ export default function SettingsContent() {
           className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
         />
         <p className="max-w-md text-sm text-white/40">
-          Tune how gazntyno looks and moves for you. Saved on this device.
+          Tune how zyme looks and moves for you. Saved on this device.
         </p>
       </div>
 

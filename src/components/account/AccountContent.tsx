@@ -3,7 +3,6 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import {
   clearProfilePicture,
-  DEFAULT_WORDMARK,
   getAccountSnapshot,
   getServerAccountSnapshot,
   levelProgress,
@@ -13,6 +12,7 @@ import {
   usernameInitials,
   WORDMARK_MAX_LENGTH,
 } from "@/lib/account";
+import { DEFAULT_WORDMARK } from "@/lib/wordmark";
 import AnimatedTitle from "@/components/common/AnimatedTitle";
 import { Row, Section } from "@/components/common/Panel";
 import AuthPanel from "@/components/account/AuthPanel";
@@ -122,7 +122,7 @@ export default function AccountContent() {
           className="text-3xl font-semibold tracking-[0.15em] text-white/90 sm:text-4xl"
         />
         <p className="max-w-md text-sm text-white/40">
-          Your profile and progress on gazntyno. {auth.uid ? "Synced to your account." : "Saved on this device."}
+          Your profile and progress on zyme. {auth.uid ? "Synced to your account." : "Saved on this device."}
         </p>
       </div>
 

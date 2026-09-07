@@ -6,7 +6,10 @@ export type BlogPost = {
   updatedAt: number;
 };
 
-const STORAGE_KEY = "technature.blog.posts";
+const STORAGE_KEY = "zyme.blog.posts";
+// The key this used before the project was renamed to zyme. Read as a
+// fallback (never written) so locally cached posts carry over.
+const LEGACY_STORAGE_KEY = "technature.blog.posts";
 
 // Posts live in localStorage, mirrored through a tiny external-store cache so
 // components read them with useSyncExternalStore instead of loading in an
@@ -22,7 +25,7 @@ function sortPosts(posts: BlogPost[]) {
 function readFromStorage(): BlogPost[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];

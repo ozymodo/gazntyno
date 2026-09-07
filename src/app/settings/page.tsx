@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import SettingsContent from "@/components/settings/SettingsContent";
 
 export const metadata: Metadata = {
-  title: "Settings — gazntyno",
-  description: "Customize colors, motion, and typography for gazntyno.",
+  title: "settings — zyme",
+  description: "customize colors, motion, and typography for zyme.",
 };
 
 export default function SettingsPage() {

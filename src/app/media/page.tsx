@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import MediaContent from "@/components/media/MediaContent";
 
 export const metadata: Metadata = {
-  title: "Media — gazntyno",
-  description: "Photos and video from gazntyno.",
+  title: "media — zyme",
+  description: "photos and video from zyme.",
 };
 
 export default function MediaPage() {

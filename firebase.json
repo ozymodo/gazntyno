@@ -10,7 +10,7 @@
     "providers": {
       "emailPassword": true,
       "googleSignIn": {
-        "oAuthBrandDisplayName": "Technature",
+        "oAuthBrandDisplayName": "zyme",
         "supportEmail": "gazntynox@gmail.com"
       }
     }

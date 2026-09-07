@@ -1,4 +1,4 @@
-# gazntyno
+# zyme
 
 An evolving space for games, words, and everything in between — one personal
 site for games, blog posts, and media, staged inside a single persistent 3D

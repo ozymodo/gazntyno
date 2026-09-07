@@ -5,7 +5,8 @@ import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import AccountBadge from "@/components/home/AccountBadge";
-import { DEFAULT_WORDMARK, getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
+import { getAccountSnapshot, getServerAccountSnapshot, subscribeAccount } from "@/lib/account";
+import { getDefaultWordmark, getServerDefaultWordmark, subscribeDefaultWordmark } from "@/lib/wordmark";
 import { useSceneTransition } from "@/components/scene/scene-context";
 import { FONT_FAMILY_VAR, getSettingsSnapshot } from "@/lib/settings";
 
@@ -34,7 +35,7 @@ const ICONS = {
 // Matches HomeButton's letters/layoutId scheme exactly, so framer-motion
 // treats the hero title and the nav button as the same letters handed off
 // between pages rather than two separate pieces of text. Both read the same
-// Account > Homepage text, falling back to DEFAULT_WORDMARK when unset.
+// Account > Homepage text, falling back to the same per-load random word when unset.
 const LETTER_TRANSITION = { layout: { duration: 0.9, ease: [0.16, 1, 0.3, 1] as const } };
 // The shared layoutId transition owns each letter's transform while it's
 // mid-flight from the home button; the idle-float/cursor-repel loop below
@@ -67,7 +68,8 @@ function seeded(i: number, salt: number) {
 export default function HomeContent() {
   const { diveTo, getPointer, emitDust } = useSceneTransition();
   const account = useSyncExternalStore(subscribeAccount, getAccountSnapshot, getServerAccountSnapshot);
-  const wordmarkText = account.wordmark || DEFAULT_WORDMARK;
+  const defaultWordmark = useSyncExternalStore(subscribeDefaultWordmark, getDefaultWordmark, getServerDefaultWordmark);
+  const wordmarkText = account.wordmark || defaultWordmark;
   // Split by code point (not raw .split("")), so a custom wordmark with a
   // multi-byte character doesn't get sliced into broken halves.
   const wordmark = useMemo(() => Array.from(wordmarkText), [wordmarkText]);
