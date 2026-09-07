@@ -5,6 +5,7 @@ import type { MouseEvent } from "react";
 import AnimatedTitle from "@/components/common/AnimatedTitle";
 import DiscordLink from "@/components/games/DiscordLink";
 import FreeroamButton from "@/components/games/FreeroamButton";
+import ItchLink from "@/components/games/ItchLink";
 import { useSceneTransition } from "@/components/scene/scene-context";
 
 const MICROBYTE_ACCENT = "52, 199, 110";
@@ -51,7 +52,7 @@ export default function GamesContent() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold tracking-wide text-white">microbyte</h2>
             <span
-              className="rounded-full border px-3 py-1 text-xs uppercase tracking-widest"
+              className="rounded-full border px-3 py-1 text-xs tracking-widest"
               style={{
                 borderColor: `rgba(${PLAYTEST_ACCENT}, 0.3)`,
                 backgroundColor: `rgba(${PLAYTEST_ACCENT}, 0.1)`,
@@ -73,6 +74,7 @@ export default function GamesContent() {
 
       <FreeroamButton />
       <DiscordLink />
+      <ItchLink />
     </div>
   );
 }
